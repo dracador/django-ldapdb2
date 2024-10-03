@@ -1,0 +1,14 @@
+services:
+  openldap:
+    build: .
+    container_name: django-ldapdb2-openldap
+    ports:
+      - '389:389'
+      - '636:636'
+    volumes:
+      - './ldifs:/ldifs'
+    ulimits:
+      nofile:
+        soft: 1024
+        hard: 1024
+    command: /init-ldap.sh
