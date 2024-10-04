@@ -1,6 +1,11 @@
 from django.db.backends.base.base import BaseDatabaseWrapper
+from django.db.backends.base.introspection import BaseDatabaseIntrospection
+from django.db.backends.base.operations import BaseDatabaseOperations
+from django.db.backends.base.validation import BaseDatabaseValidation
+
 from .client import DatabaseClient
 from .creation import DatabaseCreation
+from .features import DatabaseFeatures
 
 
 class DatabaseWrapper(BaseDatabaseWrapper):
@@ -9,18 +14,12 @@ class DatabaseWrapper(BaseDatabaseWrapper):
 
     client_class = DatabaseClient
     creation_class = DatabaseCreation
-    """ TODO 
+    features_class = DatabaseFeatures
+
+    # TODO: Implement the following classes
+    introspection_class = BaseDatabaseIntrospection
+    ops_class = BaseDatabaseOperations
+    validation_class = BaseDatabaseValidation
+
     # Mapping of Field objects to their column types.
     data_types = {}
-    # Mapping of Field objects to their SQL suffix such as AUTOINCREMENT.
-    data_types_suffix = {}
-    # Mapping of Field objects to their SQL for CHECK constraints.
-    data_type_check_constraints = {}
-    ops = None
-    SchemaEditorClass = None
-    # Classes instantiated in __init__().
-    features_class = None
-    introspection_class = None
-    ops_class = None
-    validation_class = BaseDatabaseValidation
-    """
