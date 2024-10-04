@@ -1,9 +1,12 @@
 from functools import cached_property
+from typing import TYPE_CHECKING
 
 from django.db.backends.base.features import BaseDatabaseFeatures
 from ldap.controls.sss import SSSRequestControl
 from ldap.controls.vlv import VLVRequestControl
-from ldap.ldapobject import ReconnectLDAPObject
+
+if TYPE_CHECKING:
+    from ldap.ldapobject import ReconnectLDAPObject
 
 # TODO: Since neither python-ldap nor ldap3 support Request/ResponseControls for transactions,
 #  we'll need to implement our own transaction support. Put these in controls.py
