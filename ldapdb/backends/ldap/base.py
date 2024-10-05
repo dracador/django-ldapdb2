@@ -9,8 +9,8 @@ from .features import DatabaseFeatures
 
 
 class DatabaseWrapper(BaseDatabaseWrapper):
-    display_name = "ldap"
-    vendor = "ldap"
+    display_name = "ldapdb"
+    vendor = "ldapdb"
 
     client_class = DatabaseClient
     creation_class = DatabaseCreation
