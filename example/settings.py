@@ -79,7 +79,6 @@ DATABASES = {
         "NAME": BASE_DIR / "db.sqlite3",
     },
     "ldap": {
-        "NAME": "ldapdb",
         "ENGINE": "ldapdb.backends.ldap",
         "BIND_DN": "uid=admin,ou=Users,dc=example,dc=org",
         "BIND_PASSWORD": "adminpassword",
@@ -89,6 +88,7 @@ DATABASES = {
     },
 }
 
+DATABASE_ROUTERS = ["ldapdb.router.Router"]
 
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators
