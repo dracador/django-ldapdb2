@@ -80,23 +80,23 @@ class DatabaseFeatures(BaseDatabaseFeatures):
     # Maybe also implement django_test_expected_failures & django_test_skips?
 
     @cached_property
-    def rootdse_data(self):
+    def rootdse_data(self) -> dict:
         with self.connection.cursor() as cursor:
             conn: ReconnectLDAPObject = cursor.connection
             return conn.read_rootdse_s()
 
     @cached_property
-    def supported_controls(self):
+    def supported_controls(self) -> list[str]:
         """Return a list of supported controls"""
         return [control.decode() for control in self.rootdse_data.get('supportedControl', [])]
 
     @cached_property
-    def supported_extensions(self):
+    def supported_extensions(self) -> list[str]:
         """Return a list of supported extensions"""
         return [extension.decode() for extension in self.rootdse_data.get('supportedFeatures', [])]
 
     @cached_property
-    def can_use_chunked_reads(self):
+    def can_use_chunked_reads(self) -> bool:
         """
         Confirm support for Server Side Sorting and Virtual List View.
 
@@ -107,6 +107,6 @@ class DatabaseFeatures(BaseDatabaseFeatures):
         return all(control.controlType in self.supported_controls for control in [SSSRequestControl, VLVRequestControl])
 
     @cached_property
-    def supports_transactions(self):
+    def supports_transactions(self) -> bool:
         """Confirm support for transactions. Transactions have been introduced in OpenLDAP 2.5"""
         return LDAP_OID_TRANSACTION_START in self.supported_extensions
