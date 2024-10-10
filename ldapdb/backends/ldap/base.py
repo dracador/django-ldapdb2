@@ -1,3 +1,5 @@
+from functools import cached_property
+
 import ldap
 from django.db.backends.base.base import BaseDatabaseWrapper
 from django.db.backends.base.validation import BaseDatabaseValidation
@@ -144,6 +146,10 @@ class DatabaseWrapper(BaseDatabaseWrapper):
     def _set_autocommit(self, autocommit):
         pass
 
+    @cached_property
+    def charset(self):
+        return self.settings_dict.get('CHARSET', 'utf-8')
+
     def get_connection_params(self):
         """
         Compute appropriate parameters for establishing a new connection.
@@ -157,6 +163,7 @@ class DatabaseWrapper(BaseDatabaseWrapper):
             'retry_max': self.settings_dict.get('RETRY_MAX', 1),
             'retry_delay': self.settings_dict.get('RETRY_DELAY', 60.0),
             'query_timeout': int(self.settings_dict.get('QUERY_TIMEOUT', -1)),
+            'charset': self.settings_dict.get('CHARSET', 'utf-8'),
             'page_size': int(self.settings_dict.get('PAGE_SIZE', 1000)),
             'password_hashing_algorithm': self.settings_dict.get('PASSWORD_HASHING_ALGORITHM', 'SSHA'),
             'connection_options': {
