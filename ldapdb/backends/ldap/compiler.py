@@ -1,4 +1,5 @@
 import logging
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 import ldap
@@ -11,10 +12,11 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
-class LDAPLookup:
+class LDAPSearchObject:
     base: str
     scope: ldap.SCOPE_BASE | ldap.SCOPE_ONELEVEL | ldap.SCOPE_SUBTREE
     filterstr: str
+    attrlist: Sequence[str] = frozenset(['*', '+'])
 
 
 class SQLCompiler(BaseSQLCompiler):
