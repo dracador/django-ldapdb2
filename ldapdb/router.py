@@ -32,7 +32,7 @@ class Router:
         if db in self.ldap_databases:
             return False
 
-        # avoid any migration operation on ldap models - *should* never happen, but let's be safe
-        if issubclass(model, LDAPModel):
+        # avoid any migration operation on ldap models
+        if model and issubclass(model, LDAPModel):
             return False
         return None
