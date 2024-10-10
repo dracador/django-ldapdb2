@@ -186,8 +186,11 @@ class DatabaseWrapper(BaseDatabaseWrapper):
             self.connect()
 
     @async_unsafe
-    def get_new_connection(self, conn_params):
+    def get_new_connection(self, conn_params=None):
         """Build a connection from its parameters."""
+        if conn_params is None:
+            conn_params = self.get_connection_params()
+
         connection = ldap.ldapobject.ReconnectLDAPObject(
             uri=conn_params['uri'],
             retry_max=conn_params['retry_max'],

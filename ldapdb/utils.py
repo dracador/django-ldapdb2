@@ -1,27 +1,26 @@
 import hashlib
+import logging
 import os
 from base64 import b64encode
 
-import ldap
+from django.contrib.auth.models import User
+from django.db import connections
+from django.db.models import QuerySet
+from django.db.models.sql import Query
 
+from .backends.ldap.compiler import LDAPSearchObject
 from .exceptions import UnsupportedHashAlgorithmError
+from .router import Router
 
-# TODO: Get DN and password from database settings
-DEFAULT_USER_DN = 'uid=admin,ou=Users,dc=example,dc=org'
-DEFAULT_USER_PASSWORD = 'adminpassword'
+logger = logging.getLogger(__name__)
 
 
-def initialize_connection(
-    url: str = 'ldap://localhost:389', user: str = DEFAULT_USER_DN, password: str = DEFAULT_USER_PASSWORD
-):
-    """Initialize connection to LDAP server."""
-    connection = ldap.initialize(url)
-    connection.simple_bind_s(user, password)
-    connection.set_option(ldap.OPT_REFERRALS, 0)
-    # connection.set_option(ldap.OPT_PROTOCOL_VERSION, 3)
-    # connection.set_option(ldap.OPT_X_TLS_REQUIRE_CERT, ldap.OPT_X_TLS_NEVER)
-    # connection.set_option(ldap.OPT_X_TLS_NEWCTX, 0)
-    return connection
+def initialize_connection(using=None):
+    """Shortcut to getting a ReconnectLDAPObject from our database backend."""
+    if using is None:
+        using = Router().default_database
+    db_wrapper = connections[using]
+    return db_wrapper.get_new_connection()
 
 
 def generate_password_hash(password: str, algorithm: str = 'ssha512') -> str:
