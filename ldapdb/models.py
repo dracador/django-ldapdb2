@@ -4,7 +4,7 @@ from .fields import DistinguishedNameField
 
 
 class LDAPModel(django_models.Model):
-    dn = DistinguishedNameField(primary_key=True, editable=False)
+    dn = DistinguishedNameField('entryDN', unique=True, editable=False)
 
     class Meta:
         abstract = True
