@@ -63,7 +63,7 @@ class CharField(django_fields.CharField, LdapField):
         super().__init__(*args, **defaults)
 
     @staticmethod
-    def from_ldap(value, connection):
+    def from_ldap(value, connection: DatabaseWrapper):
         if len(value) == 0:
             return ''
         else:

@@ -20,6 +20,7 @@ class DatabaseFeatures(BaseDatabaseFeatures):
     There are a lot we probably don't need or it does not make a difference settings them.
     We'll just do it for the sake of completeness.
     """
+
     delete_can_self_reference_subquery = False
     supports_nullable_unique_constraints = False
     supports_partially_nullable_unique_constraints = False

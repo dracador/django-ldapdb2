@@ -41,4 +41,4 @@ def generate_password_hash(password: str, algorithm: str = 'ssha512') -> str:
         salt = os.urandom(8)
         sha.update(salt)
         hashed_value += salt
-    return f'{{{algorithm.upper()}}}{b64encode(hashed_value).decode("utf-8")}'
+    return f'{{{algorithm.upper()}}}{b64encode(hashed_value).decode('utf-8')}'

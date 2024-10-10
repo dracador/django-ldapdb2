@@ -23,7 +23,6 @@ class SQLCompiler(BaseSQLCompiler):
         return super().get_combinator_sql(combinator, all)
 
     def compile(self, node: BaseExpression):
-        """Parse a WhereNode to a LDAP filter string."""
         logger.debug('SQLCompiler.compile: %s, %s', node, type(node))
         # if isinstance(node, WhereNode):
         #    return where_node_as_ldap(node, self, self.connection)
