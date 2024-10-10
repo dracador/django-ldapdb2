@@ -14,9 +14,9 @@ logger = logging.getLogger(__name__)
 @dataclass
 class LDAPSearchObject:
     base: str
-    scope: ldap.SCOPE_BASE | ldap.SCOPE_ONELEVEL | ldap.SCOPE_SUBTREE
     filterstr: str
     attrlist: Sequence[str] = frozenset(['*', '+'])
+    scope: ldap.SCOPE_BASE | ldap.SCOPE_ONELEVEL | ldap.SCOPE_SUBTREE = ldap.SCOPE_SUBTREE
 
 
 class SQLCompiler(BaseSQLCompiler):
