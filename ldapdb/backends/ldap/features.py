@@ -34,7 +34,7 @@ class DatabaseFeatures(BaseDatabaseFeatures):
     supports_date_lookup_using_string = False
     supports_timezones = False  # All timestamps are UTC
     has_zoneinfo_database = False
-    supports_order_by_nulls_modifier = False
+    supports_order_by_nulls_modifier = False  # we probably could implement this in python
     allows_auto_pk_0 = False
     supports_sequence_reset = False
 

@@ -1,7 +1,11 @@
+from typing import TYPE_CHECKING
+
 from django.db.models import fields as django_fields
 
-from .backends.ldap.base import DatabaseWrapper
 from .validators import validate_dn
+
+if TYPE_CHECKING:
+    from .backends.ldap.base import DatabaseWrapper
 
 
 class LdapField(django_fields.Field):
@@ -47,7 +51,7 @@ class LdapField(django_fields.Field):
         # updates to the LDAP server.
         return sorted({v for v in prepared_values if v})
 
-    def get_db_prep_save(self, value, connection: DatabaseWrapper):
+    def get_db_prep_save(self, value, connection: 'DatabaseWrapper'):
         values = self.get_db_prep_value(value, connection, prepared=False)
         if self.binary_field:
             # Already raw values; don't encode it twice.
@@ -63,7 +67,7 @@ class CharField(django_fields.CharField, LdapField):
         super().__init__(*args, **defaults)
 
     @staticmethod
-    def from_ldap(value, connection: DatabaseWrapper):
+    def from_ldap(value, connection: 'DatabaseWrapper'):
         if len(value) == 0:
             return ''
         else:
