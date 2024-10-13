@@ -12,11 +12,13 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
-class LDAPSearchObject:
+class LDAPSearch:
     base: str
     filterstr: str
-    attrlist: Sequence[str] = frozenset(['*', '+'])
+    attrlist: list[str] = frozenset(['*', '+'])
     scope: ldap.SCOPE_BASE | ldap.SCOPE_ONELEVEL | ldap.SCOPE_SUBTREE = ldap.SCOPE_SUBTREE
+    order_by: list[str] = None  # not part of the default LDAP search itself, but can be used via SSSVLV control
+
 
 
 class SQLCompiler(BaseSQLCompiler):

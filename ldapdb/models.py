@@ -1,10 +1,15 @@
+import ldap
 from django.db import models as django_models
 
 from .fields import DistinguishedNameField
 
 
 class LDAPModel(django_models.Model):
-    dn = DistinguishedNameField('entryDN', unique=True, editable=False)
+    # TODO: Check for existing base_dn and object_classes fields and raise an error if they are not present
+    base_dn = None
+    scope = ldap.SCOPE_SUBTREE
+
+    dn = DistinguishedNameField(db_column='dn', unique=True, editable=False, hidden=True)
 
     class Meta:
         abstract = True

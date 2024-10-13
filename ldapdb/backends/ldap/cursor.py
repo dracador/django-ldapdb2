@@ -2,7 +2,7 @@ import logging
 
 import ldap
 
-from ldapdb.backends.ldap.compiler import LDAPSearchObject
+from ldapdb.backends.ldap.compiler import LDAPSearch
 
 logger = logging.getLogger(__name__)
 
@@ -16,15 +16,15 @@ class DatabaseCursor:
         self.lastrowid = None
 
     def execute(self, query, params=None):
-        logger.debug('DatabaseCursor.execute: query: %s, params: %s', query, params)
+        logger.debug('DatabaseCursor.execute: query: %s (%s), params: %s', query, type(query), params)
         if params is None:
             params = {}
         self.description = None
         self.rowcount = -1
         self.lastrowid = None
 
-        if not isinstance(query, LDAPSearchObject):
-            raise ValueError('Query object must be an instance of LDAPSearchObject')
+        if not isinstance(query, LDAPSearch):
+            raise ValueError('Query object must be an instance of LDAPSearch')
 
         try:
             self.connection.search_s(query, ldap.SCOPE_SUBTREE, **params)
