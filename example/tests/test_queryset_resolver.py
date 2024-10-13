@@ -9,11 +9,21 @@ class QueryResolverTestCase(TestCase):
     --- Basic ---
     LDAPUser.objects.all()
     LDAPGroup.objects.all()
+    LDAPUser.objects.all().exists()
     LDAPUser.objects.filter(uid='test')
     LDAPUser.objects.filter(uid__lookup='test')
     LDAPUser.objects.filter(uid__in=['test1', 'test2'])
     LDAPUser.objects.filter(uid__datetimelookup__transform='test') - optional (see comment in features.py)
     LDAPUser.objects.filter(cn__contains='test').exclude(uid='specific_user')
+
+    --- Hidden DN Field handling ---
+    LDAPUser.objects.get(dn='uid=admin,dc=example,dc=com').dn
+
+    --- Ordering ---
+    LDAPUser.objects.all().order_by('uid')
+
+    --- Values ---
+    LDAPUser.objects.all().values('uid', 'cn')
 
     --- Aggregation ---
     LDAPUser.objects.all().count()
