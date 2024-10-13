@@ -69,7 +69,6 @@ class SQLCompiler(BaseSQLCompiler):
         else:
             selected_fields = all_field_names
 
-        # Update the accumulated attributes
         self.ldap_query.ldap_attributes.update(selected_fields)
         logger.debug('Selected fields for LDAP query: %s', selected_fields)
 
@@ -87,7 +86,8 @@ class SQLCompiler(BaseSQLCompiler):
 
         lookup_type = lookup.lookup_name
 
-        # Get the operator from the operators dictionary
+        # TODO: Get optional operator from LDAPField (important for ListFields) or maybe
+        #  we can get the Field.is_multiple or something
         operator_format = self.connection.operators.get(lookup_type)
 
         if operator_format is None:
@@ -119,25 +119,37 @@ class SQLCompiler(BaseSQLCompiler):
             raise NotImplementedError(f'Unsupported connector type: {node.connector}')
 
         subfilters = []
-
+        logger.debug('WhereNode: %s, %s, %s', node, node.negated, len(node.children))
         for child in node.children:
             if isinstance(child, WhereNode):
                 subfilter = self._where_node_to_ldap_filter(child)
                 subfilters.append(subfilter)
             elif isinstance(child, Lookup):
-                subfilters.append(self._parse_lookup(child))
+                subfilter = self._parse_lookup(child)
+                subfilters.append(subfilter)
             else:
                 raise TypeError(f'Unsupported child type: {type(child)}')
 
         combined_filter = ''.join(subfilters)
 
-        if node.negated:
-            ldap_filter = f'(!({ldap_operator}{combined_filter}))'
-        else:
-            ldap_filter = f'({ldap_operator}{combined_filter})'
+        logger.debug(
+            'WhereNode: negated=%s, operator=%s, combined=%s, length=%s',
+            node.negated,
+            ldap_operator,
+            combined_filter,
+            len(subfilters),
+        )
 
-        logger.debug('Generated LDAP filter for WhereNode: %s', ldap_filter)
-        return ldap_filter
+        if len(subfilters) == 1:
+            if node.negated:
+                return f'(!{combined_filter})'
+            else:
+                return combined_filter
+        else:
+            if node.negated:
+                return f'(!({ldap_operator}{combined_filter}))'
+            else:
+                return f'({ldap_operator}{combined_filter})'
 
     def _compile_where(self):
         where_node = self.query.where
@@ -148,15 +160,13 @@ class SQLCompiler(BaseSQLCompiler):
         self.ldap_query.ldap_filter = ldap_filter
         logger.debug('Compiled LDAP filter: %s', ldap_filter)
 
-    def get_combinator_sql(self, combinator, all):
-        logger.debug('SQLCompiler.get_combinator_sql: %s, %s', combinator, all)
-        return super().get_combinator_sql(combinator, all)
-
     # Debug only
-    def as_sql(self, with_limits=True, with_col_aliases=False):
+    def as_sql(self, with_limits=True, with_col_aliases=False) -> LDAPSearch:
         logger.debug(f'SQLCompiler.as_sql: with_limits={with_limits}, with_col_aliases={with_col_aliases}')  # noqa: G004
         self._compile_select()
         self._compile_where()
+        # self._compile_order_by()
+        return self.ldap_query.generate_ldap_search()
 
     def execute_sql(self, result_type=MULTI, chunked_fetch=False, chunk_size=GET_ITERATOR_CHUNK_SIZE):
         logger.debug('SQLCompiler.execute_sql: %s, %s, %s', result_type, chunked_fetch, chunk_size)
