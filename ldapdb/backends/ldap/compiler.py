@@ -1,12 +1,16 @@
 import logging
-from collections.abc import Sequence
 from dataclasses import dataclass
 
 import ldap
-from django.db.models.expressions import BaseExpression
+from django.db.models import Lookup
+from django.db.models.expressions import Col
+from django.db.models.fields import Field
 from django.db.models.sql import compiler
 from django.db.models.sql.compiler import SQLCompiler as BaseSQLCompiler
 from django.db.models.sql.constants import GET_ITERATOR_CHUNK_SIZE, MULTI
+from django.db.models.sql.where import WhereNode
+
+from ldapdb.utils import escape_ldap_filter_value
 
 logger = logging.getLogger(__name__)
 
@@ -20,22 +24,139 @@ class LDAPSearch:
     order_by: list[str] = None  # not part of the default LDAP search itself, but can be used via SSSVLV control
 
 
+class LDAPQuery:
+    ldap_filter = ''
+    ldap_attributes = set()
+    ldap_ordering = []
+
+    # TODO: Read base and scope from model
+    ldap_base = None
+    ldap_scope = ldap.SCOPE_SUBTREE
+
+    def generate_ldap_search(self) -> LDAPSearch:
+        attrlist = [attr for attr in self.ldap_attributes if attr != 'dn'] if self.ldap_attributes else ['*', '+']
+
+        return LDAPSearch(
+            base=self.ldap_base or '',  # Default to empty base if not set
+            filterstr=self.ldap_filter if self.ldap_filter else '(objectClass=*)',
+            attrlist=attrlist,
+            scope=self.ldap_scope,
+            order_by=self.ldap_ordering,
+        )
+
 
 class SQLCompiler(BaseSQLCompiler):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.ldap_query = LDAPQuery()
+
+    def _compile_select(self):
+        """
+        The default get_select handles the following cases, which we not yet support:
+        - annotation_select
+        - extra_select
+        - select_related
+        """
+        all_field_names = [field.column for field in self.query.model._meta.fields]
+
+        if self.query.deferred_loading[0]:
+            fields: list[Field] = self.query.deferred_loading[0]
+            defer: bool = self.query.deferred_loading[1]
+            if defer:
+                selected_fields = [field for field in all_field_names if field not in fields]
+            else:
+                selected_fields = [field for field in all_field_names if field in fields]
+        else:
+            selected_fields = all_field_names
+
+        # Update the accumulated attributes
+        self.ldap_query.ldap_attributes.update(selected_fields)
+        logger.debug('Selected fields for LDAP query: %s', selected_fields)
+
+    def _parse_lookup(self, lookup: Lookup) -> str:
+        """Convert a Lookup to an LDAP filter string using the defined operators."""
+        lhs = lookup.lhs
+        rhs = lookup.rhs
+
+        if isinstance(lhs, Col):
+            field_name = lhs.target.column
+        elif isinstance(lhs, Field):
+            field_name = lhs.column
+        else:
+            raise NotImplementedError(f'Unsupported lhs type: {type(lhs)}')
+
+        lookup_type = lookup.lookup_name
+
+        # Get the operator from the operators dictionary
+        operator_format = self.connection.operators.get(lookup_type)
+
+        if operator_format is None:
+            raise NotImplementedError(f'Unsupported lookup type: {lookup_type}')
+
+        if lookup_type == 'in':
+            # TODO: How to handle CharFields and ListFields differently?
+            values = ''.join([f'({field_name}={escape_ldap_filter_value(v)})' for v in rhs])
+            ldap_filter = f'(|{values})'
+            logger.debug("Generated LDAP filter for 'in' lookup: %s", ldap_filter)
+            return ldap_filter
+        elif lookup_type == 'isnull':
+            ldap_filter = f'(!({field_name}=*))' if rhs else f'({field_name}=*)'
+            logger.debug("Generated LDAP filter for 'isnull' lookup: %s", ldap_filter)
+            return ldap_filter
+        else:
+            escaped_value = escape_ldap_filter_value(rhs)
+            ldap_filter = f'({field_name}{operator_format % escaped_value})'
+            logger.debug("Generated LDAP filter for lookup '%s': %s", lookup_type, ldap_filter)
+            return ldap_filter
+
+    def _where_node_to_ldap_filter(self, node: WhereNode) -> str:
+        """Recursively convert a WhereNode to an LDAP filter string."""
+        if node.connector == 'AND':
+            ldap_operator = '&'
+        elif node.connector == 'OR':
+            ldap_operator = '|'
+        else:
+            raise NotImplementedError(f'Unsupported connector type: {node.connector}')
+
+        subfilters = []
+
+        for child in node.children:
+            if isinstance(child, WhereNode):
+                subfilter = self._where_node_to_ldap_filter(child)
+                subfilters.append(subfilter)
+            elif isinstance(child, Lookup):
+                subfilters.append(self._parse_lookup(child))
+            else:
+                raise TypeError(f'Unsupported child type: {type(child)}')
+
+        combined_filter = ''.join(subfilters)
+
+        if node.negated:
+            ldap_filter = f'(!({ldap_operator}{combined_filter}))'
+        else:
+            ldap_filter = f'({ldap_operator}{combined_filter})'
+
+        logger.debug('Generated LDAP filter for WhereNode: %s', ldap_filter)
+        return ldap_filter
+
+    def _compile_where(self):
+        where_node = self.query.where
+        if not where_node:
+            return
+
+        ldap_filter = self._where_node_to_ldap_filter(where_node)
+        self.ldap_query.ldap_filter = ldap_filter
+        logger.debug('Compiled LDAP filter: %s', ldap_filter)
+
     def get_combinator_sql(self, combinator, all):
         logger.debug('SQLCompiler.get_combinator_sql: %s, %s', combinator, all)
         return super().get_combinator_sql(combinator, all)
 
-    def compile(self, node: BaseExpression):
-        logger.debug('SQLCompiler.compile: %s, %s', node, type(node))
-        # if isinstance(node, WhereNode):
-        #    return where_node_as_ldap(node, self, self.connection)
-        return super().compile(node)
-
     # Debug only
     def as_sql(self, with_limits=True, with_col_aliases=False):
-        logger.debug('SQLCompiler.as_sql: %s, %s', with_limits, with_col_aliases)
-        return super().as_sql(with_limits, with_col_aliases)
+        logger.debug(f'SQLCompiler.as_sql: with_limits={with_limits}, with_col_aliases={with_col_aliases}')  # noqa: G004
+        self._compile_select()
+        self._compile_where()
 
     def execute_sql(self, result_type=MULTI, chunked_fetch=False, chunk_size=GET_ITERATOR_CHUNK_SIZE):
         logger.debug('SQLCompiler.execute_sql: %s, %s, %s', result_type, chunked_fetch, chunk_size)
