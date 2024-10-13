@@ -3,12 +3,8 @@ import logging
 import os
 from base64 import b64encode
 
-from django.contrib.auth.models import User
 from django.db import connections
-from django.db.models import QuerySet
-from django.db.models.sql import Query
 
-from .backends.ldap.compiler import LDAPSearchObject
 from .exceptions import UnsupportedHashAlgorithmError
 from .router import Router
 
@@ -40,4 +36,19 @@ def generate_password_hash(password: str, algorithm: str = 'ssha512') -> str:
         salt = os.urandom(8)
         sha.update(salt)
         hashed_value += salt
-    return f'{{{algorithm.upper()}}}{b64encode(hashed_value).decode('utf-8')}'
+    return f'{{{algorithm.upper()}}}{b64encode(hashed_value).decode("utf-8")}'
+
+
+def escape_ldap_filter_value(value):
+    """
+    Escape special characters in LDAP filter values.
+    """
+    if isinstance(value, str):
+        value = value.replace('\\', '\\5c')
+        value = value.replace('*', '\\2a')
+        value = value.replace('(', '\\28')
+        value = value.replace(')', '\\29')
+        value = value.replace('\x00', '\\00')
+        return value
+    else:
+        return str(value)
