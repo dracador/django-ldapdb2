@@ -1,6 +1,13 @@
+from django.db.models import QuerySet
 from django.test import TestCase
+from ldapdb.backends.ldap.compiler import LDAPSearch
 
 from example.models import LDAPUser
+
+
+def queryset_to_ldap_search(queryset: QuerySet):
+    sql_compiler = queryset.query.get_compiler(using=queryset.db)
+    return sql_compiler.as_sql()
 
 
 class QueryResolverTestCase(TestCase):
@@ -47,4 +54,7 @@ class QueryResolverTestCase(TestCase):
     """
 
     def test_resolve_basic_queryset(self):
-        LDAPUser.objects.all()
+        queryset = LDAPUser.objects.all()
+        ldap_search = queryset_to_ldap_search(queryset)
+        self.assertIsNotNone(ldap_search)
+        self.assertIsInstance(ldap_search, LDAPSearch)
