@@ -7,7 +7,8 @@ from .fields import DistinguishedNameField
 class LDAPModel(django_models.Model):
     # TODO: Check for existing base_dn and object_classes fields and raise an error if they are not present
     base_dn = None
-    scope = ldap.SCOPE_SUBTREE
+    search_scope = ldap.SCOPE_SUBTREE
+    object_classes = ['top']
 
     dn = DistinguishedNameField(db_column='dn', unique=True, editable=False, hidden=True)
 
