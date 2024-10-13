@@ -39,16 +39,13 @@ def generate_password_hash(password: str, algorithm: str = 'ssha512') -> str:
     return f'{{{algorithm.upper()}}}{b64encode(hashed_value).decode("utf-8")}'
 
 
-def escape_ldap_filter_value(value):
+def escape_ldap_filter_value(value: str):
     """
     Escape special characters in LDAP filter values.
     """
-    if isinstance(value, str):
-        value = value.replace('\\', '\\5c')
-        value = value.replace('*', '\\2a')
-        value = value.replace('(', '\\28')
-        value = value.replace(')', '\\29')
-        value = value.replace('\x00', '\\00')
-        return value
-    else:
-        return str(value)
+    value = value.replace('\\', '\\5c')
+    value = value.replace('*', '\\2a')
+    value = value.replace('(', '\\28')
+    value = value.replace(')', '\\29')
+    value = value.replace('\x00', '\\00')
+    return value
