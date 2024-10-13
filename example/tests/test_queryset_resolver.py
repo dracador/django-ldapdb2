@@ -38,6 +38,12 @@ class QueryResolverTestCase(TestCase):
     LDAPUser.objects.filter(~Q(uid='test'))
     LDAPUser.objects.filter(Q(uid='test') & ~Q(uid='test2'))
     LDAPUser.objects.filter(Q(uid='test') | ~Q(uid='test2'))
+
+    --- Deferred fields ---
+    LDAPUser.objects.defer('cn').get(uid='test').cn
+
+    --- Renaming ---
+    u = LDAPUser.objects.get(uid='test'); u.uid = 'test_renamed'; u.save()
     """
 
     def test_resolve_basic_queryset(self):
