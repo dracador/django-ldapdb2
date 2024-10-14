@@ -72,7 +72,26 @@ class QueryResolverTestCase(TestCase):
         # Using .serialize() here allows assertEqual to provide a more detailed error message
         self.assertEqual(generated_ldap_search.serialize(), expected_ldap_search.serialize())
 
-    def test_basic_querysets(self):
+    def test_ldapuser_all(self):
         queryset = LDAPUser.objects.all()
         expected_ldap_search = get_new_ldap_search()
+        self.assertLDAPSearchIsEqual(queryset, expected_ldap_search)
+
+    def test_ldapuser_filter_exclude(self):
+        queryset = LDAPUser.objects.filter(name='User').exclude(username='admin', name='OtherUser')
+        expected_ldap_search = get_new_ldap_search(
+            filterstr='(&(cn=User)(!(&(cn=OtherUser)(uid=admin))))'
+        )
+        self.assertLDAPSearchIsEqual(queryset, expected_ldap_search)
+
+    def test_ldapuser_filter_lookup_contains(self):
+        queryset = LDAPUser.objects.filter(name__contains='User')
+        expected_ldap_search = get_new_ldap_search(filterstr='(cn=*User*)')
+        self.assertLDAPSearchIsEqual(queryset, expected_ldap_search)
+
+    def test_ldapuser_filter_lookup_in(self):
+        queryset = LDAPUser.objects.filter(name__in=['User1', 'User2'])
+        expected_ldap_search = get_new_ldap_search(
+            filterstr='(|(cn=User1)(cn=User2))'
+        )
         self.assertLDAPSearchIsEqual(queryset, expected_ldap_search)
