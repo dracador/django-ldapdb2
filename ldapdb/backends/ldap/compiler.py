@@ -103,7 +103,7 @@ class SQLCompiler(BaseSQLCompiler):
         else:
             selected_fields = all_field_names
 
-        self.ldap_query.ldap_attributes.update(selected_fields)
+        self.ldap_query.ldap_attributes = selected_fields
         logger.debug('Selected fields for LDAP query: %s', selected_fields)
 
     def _parse_lookup(self, lookup: Lookup) -> str:
