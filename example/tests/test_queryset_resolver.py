@@ -1,3 +1,4 @@
+import ldap
 from django.db.models import QuerySet
 from django.test import TestCase
 from ldapdb.backends.ldap.compiler import LDAPSearch
@@ -8,6 +9,16 @@ from example.models import LDAPUser
 def queryset_to_ldap_search(queryset: QuerySet):
     sql_compiler = queryset.query.get_compiler(using=queryset.db)
     return sql_compiler.as_sql()
+
+
+def get_new_ldap_search(base=None, filterstr=None, attrlist=None, scope=None, order_by=None):
+    return LDAPSearch(
+        base=base or 'ou=Users,dc=example,dc=org',
+        filterstr=filterstr or '(objectClass=*)',
+        attrlist=attrlist or [field.column for field in LDAPUser._meta.get_fields() if field.column != 'dn'],
+        scope=scope or ldap.SCOPE_SUBTREE,
+        order_by=order_by or [],
+    )
 
 
 class QueryResolverTestCase(TestCase):
@@ -53,8 +64,15 @@ class QueryResolverTestCase(TestCase):
     u = LDAPUser.objects.get(uid='test'); u.uid = 'test_renamed'; u.save()
     """
 
-    def test_resolve_basic_queryset(self):
+    def assertLDAPSearchIsEqual(self, queryset: QuerySet, expected_ldap_search: LDAPSearch):
+        generated_ldap_search = queryset_to_ldap_search(queryset)
+        self.assertIsNotNone(generated_ldap_search)
+        self.assertIsInstance(generated_ldap_search, LDAPSearch)
+
+        # Using .serialize() here allows assertEqual to provide a more detailed error message
+        self.assertEqual(generated_ldap_search.serialize(), expected_ldap_search.serialize())
+
+    def test_basic_querysets(self):
         queryset = LDAPUser.objects.all()
-        ldap_search = queryset_to_ldap_search(queryset)
-        self.assertIsNotNone(ldap_search)
-        self.assertIsInstance(ldap_search, LDAPSearch)
+        expected_ldap_search = get_new_ldap_search()
+        self.assertLDAPSearchIsEqual(queryset, expected_ldap_search)
