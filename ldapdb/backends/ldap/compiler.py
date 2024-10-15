@@ -139,6 +139,9 @@ class SQLCompiler(BaseSQLCompiler):
     def _compile_order_by(self):
         ordering_rules = []
         for order_expr, _order_data in self.get_order_by():
+            if not isinstance(order_expr.expression, Col):
+                raise NotImplementedError(f'Unsupported order expression type: {type(order_expr.expression)}')
+
             attrname = order_expr.field.column
             ordering_rule = getattr(order_expr.field, 'ordering_rule', None)
             if order_expr.descending:
