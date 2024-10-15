@@ -5,10 +5,10 @@ from .fields import DistinguishedNameField
 
 
 class LDAPModel(django_models.Model):
-    # TODO: Check for existing base_dn and object_classes fields and raise an error if they are not present
-    base_dn = None
-    search_scope = ldap.SCOPE_SUBTREE
-    object_classes = ['top']
+    base_dn: str = None
+    base_filter: str = '(objectClass=*)'
+    search_scope: int = ldap.SCOPE_SUBTREE
+    object_classes: list[str] = ['top']
 
     dn = DistinguishedNameField(db_column='dn', unique=True, editable=False, hidden=True)
 
@@ -16,7 +16,15 @@ class LDAPModel(django_models.Model):
         abstract = True
         managed = False
 
+    @classmethod
+    def _check_required_attrs(cls):
+        for required_attribute in ['base_dn', 'object_classes']:
+            if not getattr(cls, required_attribute, None):
+                raise ValueError(f'{cls.__name__} is missing the required attribute {required_attribute}')
+
     def __init_subclass__(cls, **kwargs):
+        cls._check_required_attrs()
+
         # We want to set managed to False for all LDAP models but don't want to force the user to do it themselves
         if not hasattr(cls, 'Meta'):
             cls.Meta = type('Meta', (), {'managed': False})
