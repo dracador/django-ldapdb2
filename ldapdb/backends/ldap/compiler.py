@@ -7,7 +7,6 @@ from django.db.models.sql import compiler
 from django.db.models.sql.compiler import SQLCompiler as BaseSQLCompiler
 from django.db.models.sql.constants import GET_ITERATOR_CHUNK_SIZE, MULTI
 from django.db.models.sql.where import WhereNode
-from ldap.ldapobject import ReconnectLDAPObject
 
 from ldapdb.models import LDAPModel
 from ldapdb.utils import escape_ldap_filter_value
@@ -30,25 +29,21 @@ class SQLCompiler(BaseSQLCompiler):
 
     def _compile_select(self):
         """
-        The default get_select handles the following cases, which we not yet support:
+        The default get_select handles the following cases, which we not (yet?) support:
         - annotation_select
         - extra_select
         - select_related
         """
-        all_field_names = [field.column for field in self.query.model._meta.fields]
+        all_field_names = [field.column for field in self.query.model._meta.fields if field.column != 'dn']
 
         if self.query.deferred_loading[0]:
             fields: list[Field] = self.query.deferred_loading[0]
             defer: bool = self.query.deferred_loading[1]
             if defer:
-                selected_fields = [field for field in all_field_names if field not in fields]
+                return [field for field in all_field_names if field not in fields]
             else:
-                selected_fields = [field for field in all_field_names if field in fields]
-        else:
-            selected_fields = all_field_names
-
-        self.ldap_query.ldap_attributes = selected_fields
-        logger.debug('Selected fields for LDAP query: %s', selected_fields)
+                return [field for field in all_field_names if field in fields]
+        return all_field_names
 
     def _parse_lookup(self, lookup: Lookup) -> str:
         """Convert a Lookup to an LDAP filter string using the defined operators."""
@@ -64,7 +59,7 @@ class SQLCompiler(BaseSQLCompiler):
 
         lookup_type = lookup.lookup_name
 
-        # TODO: Get optional operator from LDAPField or maybe we can get the Field.is_multiple or something
+        # TODO: Get optional operator from LDAPField
         operator_format = self.connection.operators.get(lookup_type)
 
         if operator_format is None:
@@ -128,13 +123,15 @@ class SQLCompiler(BaseSQLCompiler):
                 return f'({ldap_operator}{combined_filter})'
 
     def _compile_where(self):
+        base_filter = getattr(self.query.model, 'base_filter', '(objectClass=*)')
         where_node = self.query.where
         if not where_node:
-            return
+            return base_filter
 
         ldap_filter = self._where_node_to_ldap_filter(where_node)
-        self.ldap_query.ldap_filter = ldap_filter
+        ldap_filter = f'(&{base_filter}{ldap_filter})'
         logger.debug('Compiled LDAP filter: %s', ldap_filter)
+        return ldap_filter
 
     def _compile_order_by(self):
         ordering_rules = []
@@ -147,21 +144,22 @@ class SQLCompiler(BaseSQLCompiler):
             if order_expr.descending:
                 attrname = f'-{attrname}'
             ordering_rules.append((attrname, ordering_rule if ordering_rule else self.DEFAULT_ORDERING_RULE))
-        if not ordering_rules:
-            pk_field = self.query.model._meta.pk
-            ordering_rule = getattr(pk_field, 'ordering_rule', None)
-            ordering_rules.append((pk_field.column, ordering_rule if ordering_rule else self.DEFAULT_ORDERING_RULE))
 
-        self.ldap_query.ldap_ordering = ordering_rules
-        logger.debug("Order by fields for LDAP query: %s", ordering_rules)
+        logger.debug('Order by fields for LDAP query: %s', ordering_rules)
+        return ordering_rules
 
-    # Debug only
-    def as_sql(self, with_limits=True, with_col_aliases=False) -> LDAPSearch:
-        logger.debug(f'SQLCompiler.as_sql: with_limits={with_limits}, with_col_aliases={with_col_aliases}')  # noqa: G004
-        self._compile_select()
-        self._compile_where()
-        self._compile_order_by()
-        return self.ldap_query.generate_ldap_search()
+    def as_sql(self, with_limits=True, with_col_aliases=False) -> tuple[LDAPSearch, tuple]:
+        logger.debug('SQLCompiler.as_sql: with_limits=%s, with_col_aliases=%s', with_limits, with_col_aliases)
+
+        # Run pre_sql_setup to make sure self.has_extra_select is set
+        self.pre_sql_setup(
+            with_col_aliases=with_col_aliases or bool(self.query.combinator),
+        )
+
+        self.ldap_query.attrlist = self._compile_select()
+        self.ldap_query.filterstr = self._compile_where()
+        self.ldap_query.order_by = self._compile_order_by()  # only used when searching via SSSVLV
+        return self.ldap_query, ()
 
     def execute_sql(self, result_type=MULTI, chunked_fetch=False, chunk_size=GET_ITERATOR_CHUNK_SIZE):
         logger.debug('SQLCompiler.execute_sql: %s, %s, %s', result_type, chunked_fetch, chunk_size)
