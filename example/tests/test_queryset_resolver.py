@@ -74,7 +74,7 @@ class QueryResolverTestCase(TestCase):
         self.assertIsInstance(generated_ldap_search, LDAPSearch)
 
         # Using .serialize() here allows assertEqual to provide a more detailed error message
-        self.assertEqual(generated_ldap_search.serialize(), expected_ldap_search.serialize())
+        self.assertEqual(expected_ldap_search.serialize(), generated_ldap_search.serialize())
 
     def test_ldapuser_all(self):
         queryset = LDAPUser.objects.all().order_by()
@@ -101,4 +101,9 @@ class QueryResolverTestCase(TestCase):
     def test_ldapuser_order_by(self):
         queryset = LDAPUser.objects.all().order_by('name')
         expected_ldap_search = get_new_ldap_search(order_by=[('cn', 'caseIgnoreOrderingMatch')])
+        self.assertLDAPSearchIsEqual(queryset, expected_ldap_search)
+
+    def test_ldapuser_order_by_reverse(self):
+        queryset = LDAPUser.objects.all().order_by('-name')
+        expected_ldap_search = get_new_ldap_search(order_by=[('-cn', 'caseIgnoreOrderingMatch')])
         self.assertLDAPSearchIsEqual(queryset, expected_ldap_search)
