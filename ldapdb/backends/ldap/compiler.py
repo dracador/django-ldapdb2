@@ -23,7 +23,7 @@ class LDAPSearch:
     filterstr: str
     attrlist: list[str] = frozenset(['*', '+'])
     scope: ldap.SCOPE_BASE | ldap.SCOPE_ONELEVEL | ldap.SCOPE_SUBTREE = ldap.SCOPE_SUBTREE
-    order_by: list[str] = None  # not part of the default LDAP search itself, but can be used via SSSVLV control
+    order_by: list[tuple[str, str]] = None  # not part of the default LDAP search itself, but can be used via SSSVLV
 
     def __eq__(self, other):
         if not isinstance(other, LDAPSearch):
@@ -39,7 +39,7 @@ class LDAPSearch:
             'filterstr': self.filterstr,
             'attrlist': sorted(self.attrlist),
             'scope': self.scope,
-            'order_by': sorted(self.order_by),
+            'order_by': sorted(self.order_by) if self.order_by else None,
         }
 
     def search_s(self, connection: ReconnectLDAPObject):
@@ -54,7 +54,7 @@ class LDAPQuery:
         ldap_scope: int,
         ldap_filter: str = None,
         ldap_attributes: set = None,
-        ldap_ordering: list = None,
+        ldap_ordering: list[tuple[str, str]] = None,
     ):
         self.ldap_attributes = ldap_attributes or {'*', '+'}
         self.ldap_base = base
@@ -75,6 +75,8 @@ class LDAPQuery:
 
 
 class SQLCompiler(BaseSQLCompiler):
+    DEFAULT_ORDERING_RULE = 'caseIgnoreOrderingMatch'  # rfc3417 / 2.5.13.3
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -120,15 +122,13 @@ class SQLCompiler(BaseSQLCompiler):
 
         lookup_type = lookup.lookup_name
 
-        # TODO: Get optional operator from LDAPField (important for ListFields) or maybe
-        #  we can get the Field.is_multiple or something
+        # TODO: Get optional operator from LDAPField or maybe we can get the Field.is_multiple or something
         operator_format = self.connection.operators.get(lookup_type)
 
         if operator_format is None:
             raise NotImplementedError(f'Unsupported lookup type: {lookup_type}')
 
         if lookup_type == 'in':
-            # TODO: How to handle CharFields and ListFields differently?
             values = ''.join([f'({field_name}={escape_ldap_filter_value(v)})' for v in rhs])
             ldap_filter = f'(|{values})'
             logger.debug("Generated LDAP filter for 'in' lookup: %s", ldap_filter)
@@ -194,12 +194,28 @@ class SQLCompiler(BaseSQLCompiler):
         self.ldap_query.ldap_filter = ldap_filter
         logger.debug('Compiled LDAP filter: %s', ldap_filter)
 
+    def _compile_order_by(self):
+        ordering_rules = []
+        for order_expr, _order_data in self.get_order_by():
+            attrname = order_expr.field.column
+            ordering_rule = getattr(order_expr.field, 'ordering_rule', None)
+            if order_expr.descending:
+                attrname = f'-{attrname}'
+            ordering_rules.append((attrname, ordering_rule if ordering_rule else self.DEFAULT_ORDERING_RULE))
+        if not ordering_rules:
+            pk_field = self.query.model._meta.pk
+            ordering_rule = getattr(pk_field, 'ordering_rule', None)
+            ordering_rules.append((pk_field.column, ordering_rule if ordering_rule else self.DEFAULT_ORDERING_RULE))
+
+        self.ldap_query.ldap_ordering = ordering_rules
+        logger.debug("Order by fields for LDAP query: %s", ordering_rules)
+
     # Debug only
     def as_sql(self, with_limits=True, with_col_aliases=False) -> LDAPSearch:
         logger.debug(f'SQLCompiler.as_sql: with_limits={with_limits}, with_col_aliases={with_col_aliases}')  # noqa: G004
         self._compile_select()
         self._compile_where()
-        # self._compile_order_by()
+        self._compile_order_by()
         return self.ldap_query.generate_ldap_search()
 
     def execute_sql(self, result_type=MULTI, chunked_fetch=False, chunk_size=GET_ITERATOR_CHUNK_SIZE):

@@ -91,7 +91,10 @@ class QueryResolverTestCase(TestCase):
 
     def test_ldapuser_filter_lookup_in(self):
         queryset = LDAPUser.objects.filter(name__in=['User1', 'User2'])
-        expected_ldap_search = get_new_ldap_search(
-            filterstr='(|(cn=User1)(cn=User2))'
-        )
+        expected_ldap_search = get_new_ldap_search(filterstr='(|(cn=User1)(cn=User2))')
+        self.assertLDAPSearchIsEqual(queryset, expected_ldap_search)
+
+    def test_ldapuser_order_by(self):
+        queryset = LDAPUser.objects.all().order_by('name')
+        expected_ldap_search = get_new_ldap_search(order_by=[('cn', 'caseIgnoreOrderingMatch')])
         self.assertLDAPSearchIsEqual(queryset, expected_ldap_search)
