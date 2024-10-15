@@ -1,7 +1,7 @@
 import ldap
 from django.db.models import QuerySet
 from django.test import TestCase
-from ldapdb.backends.ldap.compiler import LDAPSearch
+from ldapdb.backends.ldap import LDAPSearch
 
 from example.models import LDAPUser
 

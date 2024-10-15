@@ -1,7 +1,5 @@
 import logging
-from dataclasses import dataclass
 
-import ldap
 from django.db.models import Lookup
 from django.db.models.expressions import Col
 from django.db.models.fields import Field
@@ -13,65 +11,9 @@ from ldap.ldapobject import ReconnectLDAPObject
 
 from ldapdb.models import LDAPModel
 from ldapdb.utils import escape_ldap_filter_value
+from .lib import LDAPSearch
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class LDAPSearch:
-    base: str
-    filterstr: str
-    attrlist: list[str] = frozenset(['*', '+'])
-    scope: ldap.SCOPE_BASE | ldap.SCOPE_ONELEVEL | ldap.SCOPE_SUBTREE = ldap.SCOPE_SUBTREE
-    order_by: list[tuple[str, str]] = None  # not part of the default LDAP search itself, but can be used via SSSVLV
-
-    def __eq__(self, other):
-        if not isinstance(other, LDAPSearch):
-            return False
-        return self.serialize() == other.serialize()
-
-    def __dict__(self):
-        return self.serialize()
-
-    def serialize(self):
-        return {
-            'base': self.base,
-            'filterstr': self.filterstr,
-            'attrlist': sorted(self.attrlist),
-            'scope': self.scope,
-            'order_by': sorted(self.order_by) if self.order_by else None,
-        }
-
-    def search_s(self, connection: ReconnectLDAPObject):
-        # Should be called through the Compiler/Query.execute() method but is helpful in tests
-        return connection.search_s(self.base, self.scope, self.filterstr, self.attrlist)
-
-
-class LDAPQuery:
-    def __init__(
-        self,
-        base: str,
-        ldap_scope: int,
-        ldap_filter: str = None,
-        ldap_attributes: set = None,
-        ldap_ordering: list[tuple[str, str]] = None,
-    ):
-        self.ldap_attributes = ldap_attributes or {'*', '+'}
-        self.ldap_base = base
-        self.ldap_filter = ldap_filter or '(objectClass=*)'
-        self.ldap_ordering = ldap_ordering or []
-        self.ldap_scope = ldap_scope
-
-    def generate_ldap_search(self) -> LDAPSearch:
-        attrlist = [attr for attr in self.ldap_attributes if attr != 'dn'] if self.ldap_attributes else ['*', '+']
-
-        return LDAPSearch(
-            base=self.ldap_base,
-            filterstr=self.ldap_filter if self.ldap_filter else '(objectClass=*)',
-            attrlist=attrlist,
-            scope=self.ldap_scope,
-            order_by=self.ldap_ordering,
-        )
 
 
 class SQLCompiler(BaseSQLCompiler):
@@ -82,7 +24,7 @@ class SQLCompiler(BaseSQLCompiler):
 
         model = self.query.model
         if issubclass(model, LDAPModel):
-            self.ldap_query = LDAPQuery(model.base_dn, model.search_scope)
+            self.ldap_query = LDAPSearch(base=model.base_dn, scope=model.search_scope)
         else:
             raise TypeError(f'Expected model to be a subclass of LDAPModel but LDAPModel not in MRO: {model.__mro__}')
 
