@@ -2,6 +2,7 @@ from functools import cached_property
 from typing import TYPE_CHECKING
 
 from django.db.backends.base.features import BaseDatabaseFeatures
+from ldap.controls import SimplePagedResultsControl
 from ldap.controls.sss import SSSRequestControl
 from ldap.controls.vlv import VLVRequestControl
 
@@ -96,6 +97,16 @@ class DatabaseFeatures(BaseDatabaseFeatures):
         return [extension.decode() for extension in self.rootdse_data.get('supportedFeatures', [])]
 
     @cached_property
+    def supports_simple_paged_results(self) -> bool:
+        """Confirm support for Simple Paged Results."""
+        return SimplePagedResultsControl.controlType in self.supported_controls
+
+    @cached_property
+    def supports_sssvlv(self) -> bool:
+        """Confirm support for Server Side Sorting and Virtual List View."""
+        return all(control.controlType in self.supported_controls for control in [SSSRequestControl, VLVRequestControl])
+
+    @cached_property
     def can_use_chunked_reads(self) -> bool:
         """
         Confirm support for Server Side Sorting and Virtual List View.
@@ -104,7 +115,7 @@ class DatabaseFeatures(BaseDatabaseFeatures):
         However, it's pretty useless without the SSS & VLV controls since we can't do any ordering and the use case for
         an unordered paginitation is more of an exception than the rule.
         """
-        return all(control.controlType in self.supported_controls for control in [SSSRequestControl, VLVRequestControl])
+        return self.supports_sssvlv or self.supports_simple_paged_results
 
     @cached_property
     def supports_transactions(self) -> bool:
