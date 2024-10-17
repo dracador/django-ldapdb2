@@ -9,6 +9,7 @@ class LDAPUser(LDAPModel):
 
     username = CharField(db_column='uid', primary_key=True)
     name = CharField(db_column='cn')
+    mail = CharField(db_column='mail')
 
     class Meta:
         managed = False
