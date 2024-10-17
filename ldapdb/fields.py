@@ -66,6 +66,14 @@ class CharField(django_fields.CharField, LdapField):
         defaults.update(kwargs)
         super().__init__(*args, **defaults)
 
+    def to_python(self, value):
+        print('to_python', value)
+        return value
+
+    def get_prep_value(self, value):
+        print('prep_value', value)
+        return super().get_prep_value(value)
+
     @staticmethod
     def from_ldap(value, connection: 'DatabaseWrapper'):
         if len(value) == 0:

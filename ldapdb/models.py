@@ -1,6 +1,6 @@
 import ldap
 from django.db import models as django_models
-from django.db.models import Manager, QuerySet
+from django.db.models import QuerySet
 from django.db.models.sql import Query
 
 from .fields import DistinguishedNameField
@@ -8,7 +8,7 @@ from .fields import DistinguishedNameField
 
 class LDAPQuery(Query):
     def __init__(self, model, **kwargs):
-        print("hihi huhu")
+        print('hihi huhu')
         super().__init__(model, **kwargs)
 
 

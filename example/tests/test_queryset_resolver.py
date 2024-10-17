@@ -134,3 +134,10 @@ class QueryResolverTestCase(TestCase):
         queryset = LDAPUser.objects.all().order_by()[10:20]
         expected_ldap_search = get_new_ldap_search(limit=10, offset=10)
         self.assertLDAPSearchIsEqual(queryset, expected_ldap_search)
+
+    def test_ldapuser_values(self):
+        # TODO: attrlist is wrong and queryset is empty
+        queryset = LDAPUser.objects.all().order_by().values('username')
+        expected_ldap_search = get_new_ldap_search(attrlist=['uid'])
+        self.assertLDAPSearchIsEqual(queryset, expected_ldap_search)
+        self.assertQuerySetEqual(queryset, [])

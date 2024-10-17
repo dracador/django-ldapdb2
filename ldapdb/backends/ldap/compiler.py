@@ -1,5 +1,4 @@
 import logging
-from itertools import chain
 from typing import TYPE_CHECKING
 
 from django.db import NotSupportedError
@@ -170,6 +169,7 @@ class SQLCompiler(BaseSQLCompiler):
         self.ldap_query.attrlist = self._compile_select()
         self.ldap_query.filterstr = self._compile_where()
         self.ldap_query.order_by = self._compile_order_by()  # only used when searching via SSSVLV
+
         self.ldap_query.offset = self.query.low_mark
         if with_limits and self.query.high_mark:
             self.ldap_query.limit = self.query.high_mark - self.query.low_mark
@@ -184,25 +184,6 @@ class SQLCompiler(BaseSQLCompiler):
     def execute_sql(self, result_type=MULTI, chunked_fetch=False, chunk_size=GET_ITERATOR_CHUNK_SIZE):
         logger.debug('SQLCompiler.execute_sql: %s, %s, %s', result_type, chunked_fetch, chunk_size)
         return super().execute_sql(result_type, chunked_fetch, chunk_size)
-
-    def results_iter(
-        self,
-        results=None,
-        tuple_expected=False,
-        chunked_fetch=False,
-        chunk_size=GET_ITERATOR_CHUNK_SIZE,
-    ):
-        logger.debug('SQLCompiler.results_iter: %s, %s, %s, %s', results, tuple_expected, chunked_fetch, chunk_size)
-        if results is None:
-            results = self.execute_sql(MULTI, chunked_fetch=chunked_fetch, chunk_size=chunk_size)
-        fields = [s[0] for s in self.select[0: self.col_count]]
-        converters = self.get_converters(fields)
-        rows = chain.from_iterable(results)
-        if converters:
-            rows = self.apply_converters(rows, converters)
-            if tuple_expected:
-                rows = map(tuple, rows)
-        return rows
 
 
 class SQLInsertCompiler(compiler.SQLInsertCompiler, SQLCompiler):
