@@ -1,7 +1,7 @@
 import ldap
 from django.db.models import QuerySet
 from django.test import TestCase
-from ldapdb.backends.ldap import LDAPSearch
+from ldapdb.backends.ldap import LDAPSearch, LDAPSearchControlType
 
 from example.models import LDAPUser
 
@@ -11,17 +11,29 @@ def queryset_to_ldap_search(queryset: QuerySet):
     return sql_compiler.as_sql()[0]
 
 
-def get_new_ldap_search(base=None, filterstr=None, attrlist=None, scope=None, order_by=None, ignore_base_filter=False):
+def get_new_ldap_search(
+    base=None,
+    filterstr=None,
+    attrlist=None,
+    scope=None,
+    order_by=None,
+    limit=0,
+    offset=0,
+    ignore_base_filter=False,
+):
     base_filter = LDAPUser.base_filter
     if base_filter and not ignore_base_filter:
         filterstr = f'(&{base_filter}{filterstr})' if filterstr else base_filter
 
     return LDAPSearch(
+        attrlist=attrlist or [field.column for field in LDAPUser._meta.get_fields()],
         base=base or 'ou=Users,dc=example,dc=org',
+        control_type=LDAPSearchControlType.SSSVLV,
         filterstr=filterstr or LDAPUser.base_filter,
-        attrlist=attrlist or [field.column for field in LDAPUser._meta.get_fields() if field.column != 'dn'],
+        limit=limit,
+        offset=offset,
+        order_by=order_by,
         scope=scope or ldap.SCOPE_SUBTREE,
-        order_by=order_by or [],
     )
 
 
@@ -85,9 +97,7 @@ class QueryResolverTestCase(TestCase):
 
     def test_ldapuser_filter_exclude(self):
         queryset = LDAPUser.objects.filter(name='User').exclude(username='admin', name='OtherUser').order_by()
-        expected_ldap_search = get_new_ldap_search(
-            filterstr='(&(cn=User)(!(&(cn=OtherUser)(uid=admin))))'
-        )
+        expected_ldap_search = get_new_ldap_search(filterstr='(&(cn=User)(!(&(cn=OtherUser)(uid=admin))))')
         self.assertLDAPSearchIsEqual(queryset, expected_ldap_search)
 
     def test_ldapuser_filter_lookup_contains(self):
@@ -109,3 +119,24 @@ class QueryResolverTestCase(TestCase):
         queryset = LDAPUser.objects.all().order_by('-name')
         expected_ldap_search = get_new_ldap_search(order_by=[('-cn', 'caseIgnoreOrderingMatch')])
         self.assertLDAPSearchIsEqual(queryset, expected_ldap_search)
+
+    def test_ldapuser_slicing_from(self):
+        queryset = LDAPUser.objects.all().order_by()[10:]
+        expected_ldap_search = get_new_ldap_search(offset=10)
+        self.assertLDAPSearchIsEqual(queryset, expected_ldap_search)
+
+    def test_ldapuser_slicing_to(self):
+        queryset = LDAPUser.objects.all().order_by()[:10]
+        expected_ldap_search = get_new_ldap_search(limit=10)
+        self.assertLDAPSearchIsEqual(queryset, expected_ldap_search)
+
+    def test_ldapuser_slicing_from_to(self):
+        queryset = LDAPUser.objects.all().order_by()[10:20]
+        expected_ldap_search = get_new_ldap_search(limit=10, offset=10)
+        self.assertLDAPSearchIsEqual(queryset, expected_ldap_search)
+
+    def test_ldapuser_values(self):
+        queryset = LDAPUser.objects.all().order_by().values('username')
+        expected_ldap_search = get_new_ldap_search(attrlist=['uid'])
+        self.assertLDAPSearchIsEqual(queryset, expected_ldap_search)
+        self.assertTrue(queryset)
