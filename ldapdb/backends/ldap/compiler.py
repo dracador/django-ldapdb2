@@ -33,23 +33,29 @@ class SQLCompiler(BaseSQLCompiler):
         else:
             raise TypeError(f'Expected model to be a subclass of LDAPModel but LDAPModel not in MRO: {model.__mro__}')
 
-    def _compile_select(self):
-        """
-        The default get_select handles the following cases, which we not (yet?) support:
-        - annotation_select
-        - extra_select
-        - select_related
-        """
-        all_field_names = [field.column for field in self.query.model._meta.fields if field.column != 'dn']
+        self.field_mapping = {field.attname: field.column for field in self.query.model._meta.fields}
+        self.reverse_field_mapping = {field.column: field for field in self.query.model._meta.fields}
 
-        if self.query.deferred_loading[0]:
-            fields: list[Field] = self.query.deferred_loading[0]
-            defer: bool = self.query.deferred_loading[1]
-            if defer:
-                return [field for field in all_field_names if field not in fields]
-            else:
-                return [field for field in all_field_names if field in fields]
-        return all_field_names
+    def _compile_select(self) -> set[str]:
+        # TODO: Implement annotations & Related fields
+        selected_fields = set()
+
+        for select_info in self.query.select:
+            if hasattr(select_info, 'target'):
+                field = select_info.target
+                field_name = field.attname
+                selected_fields.add(field_name)
+
+        # if self.query.annotations:
+        #     selected_fields.update(self.query.annotations.keys())
+
+        if selected_fields:
+            selected_columns = {self.field_mapping[field_name] for field_name in selected_fields}
+        else:
+            selected_columns = set(self.field_mapping.values())
+
+        logger.debug('Selected LDAP attributes for query: %s', selected_columns)
+        return selected_columns
 
     def _parse_lookup(self, lookup: Lookup) -> str:
         """Convert a Lookup to an LDAP filter string using the defined operators."""
