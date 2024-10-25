@@ -11,112 +11,27 @@ from .creation import DatabaseCreation
 from .cursor import DatabaseCursor
 from .features import DatabaseFeatures
 from .introspection import DatabaseIntrospection
+from .lib import LDAPDatabase
 from .operations import DatabaseOperations
-
-
-class LdapDatabase:
-    # Base class for all exceptions as defined in PEP-249
-    Error = ldap.LDAPError
-
-    class DatabaseError(Error):
-        """Database-side errors."""
-
-    class OperationalError(
-        DatabaseError,
-        ldap.ADMINLIMIT_EXCEEDED,
-        ldap.AUTH_METHOD_NOT_SUPPORTED,
-        ldap.AUTH_UNKNOWN,
-        ldap.BUSY,
-        ldap.CONFIDENTIALITY_REQUIRED,
-        ldap.CONNECT_ERROR,
-        ldap.INAPPROPRIATE_AUTH,
-        ldap.INVALID_CREDENTIALS,
-        ldap.OPERATIONS_ERROR,
-        ldap.RESULTS_TOO_LARGE,
-        ldap.SASL_BIND_IN_PROGRESS,
-        ldap.SERVER_DOWN,
-        ldap.SIZELIMIT_EXCEEDED,
-        ldap.STRONG_AUTH_NOT_SUPPORTED,
-        ldap.STRONG_AUTH_REQUIRED,
-        ldap.TIMELIMIT_EXCEEDED,
-        ldap.TIMEOUT,
-        ldap.UNAVAILABLE,
-        ldap.UNAVAILABLE_CRITICAL_EXTENSION,
-        ldap.UNWILLING_TO_PERFORM,
-    ):
-        """Exceptions related to the database operations, out of the programmer control."""
-
-    class IntegrityError(
-        DatabaseError,
-        ldap.AFFECTS_MULTIPLE_DSAS,
-        ldap.ALREADY_EXISTS,
-        ldap.CONSTRAINT_VIOLATION,
-        ldap.TYPE_OR_VALUE_EXISTS,
-    ):
-        """Exceptions related to database Integrity."""
-
-    class DataError(
-        DatabaseError,
-        ldap.INVALID_DN_SYNTAX,
-        ldap.INVALID_SYNTAX,
-        ldap.NOT_ALLOWED_ON_NONLEAF,
-        ldap.NOT_ALLOWED_ON_RDN,
-        ldap.OBJECT_CLASS_VIOLATION,
-        ldap.UNDEFINED_TYPE,
-    ):
-        """Exceptions related to invalid data"""
-
-    class InterfaceError(
-        ldap.CLIENT_LOOP,
-        ldap.DECODING_ERROR,
-        ldap.ENCODING_ERROR,
-        ldap.LOCAL_ERROR,
-        ldap.LOOP_DETECT,
-        ldap.NO_MEMORY,
-        ldap.PROTOCOL_ERROR,
-        ldap.REFERRAL_LIMIT_EXCEEDED,
-        ldap.USER_CANCELLED,
-        Error,
-    ):
-        """Exceptions related to the pyldap interface."""
-
-    class InternalError(
-        DatabaseError,
-        ldap.ALIAS_DEREF_PROBLEM,
-        ldap.ALIAS_PROBLEM,
-    ):
-        """Exceptions encountered within the database."""
-
-    class ProgrammingError(
-        DatabaseError,
-        ldap.CONTROL_NOT_FOUND,
-        ldap.FILTER_ERROR,
-        ldap.INAPPROPRIATE_MATCHING,
-        ldap.NAMING_VIOLATION,
-        ldap.NO_SUCH_ATTRIBUTE,
-        ldap.NO_SUCH_OBJECT,
-        ldap.PARAM_ERROR,
-    ):
-        """Invalid data send by the programmer."""
-
-    class NotSupportedError(
-        DatabaseError,
-        ldap.NOT_SUPPORTED,
-    ):
-        """Exception for unsupported actions."""
 
 
 class DatabaseWrapper(BaseDatabaseWrapper):
     display_name = 'ldapdb'
     vendor = 'ldap'
 
-    Database = LdapDatabase
+    Database = LDAPDatabase
 
+    client: DatabaseClient
     client_class = DatabaseClient
+    creation: DatabaseCreation
     creation_class = DatabaseCreation
+    features: DatabaseFeatures
     features_class = DatabaseFeatures
+    ops: DatabaseOperations
     ops_class = DatabaseOperations
+    introspection: DatabaseIntrospection
     introspection_class = DatabaseIntrospection
+    validation: BaseDatabaseValidation
     validation_class = BaseDatabaseValidation
 
     operators = {
