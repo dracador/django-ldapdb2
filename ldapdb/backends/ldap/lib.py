@@ -14,18 +14,20 @@ class LDAPSearch:
         self,
         base: str,
         filterstr: str = '(objectClass=*)',
-        attrlist: list[str] = frozenset(['*', '+']),
+        attrlist: list[str] = None,  # Might contain "dn" attribute - must be ignored on searches!
         scope: ldap.SCOPE_BASE | ldap.SCOPE_ONELEVEL | ldap.SCOPE_SUBTREE = ldap.SCOPE_SUBTREE,
         order_by: list[tuple[str, str]] = None,  # can only be used when using SSSVLV
         control_type: LDAPSearchControlType = LDAPSearchControlType.NO_CONTROL,
-        limit: int = 0,  # 0 means no limit
-        offset: int = 0,
+        limit: int = 0,  # 0 means no limit. Corresponds to (high_mark - low_mark) in Django
+        offset: int = 0,  # 0 based indexing. Corresponds to low_mark in Django
     ):
+        if attrlist is None:
+            attrlist = []
         self.base = base
         self.filterstr = filterstr
-        self.attrlist = attrlist
+        self.attrlist = attrlist or []
         self.scope = scope
-        self.order_by = order_by
+        self.order_by = order_by or []
         self.control_type = control_type
         self.limit = limit
         self.offset = offset

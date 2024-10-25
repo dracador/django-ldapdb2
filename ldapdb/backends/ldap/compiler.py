@@ -1,5 +1,7 @@
 import logging
+from typing import TYPE_CHECKING
 
+from django.db import NotSupportedError
 from django.db.models import Lookup
 from django.db.models.expressions import Col
 from django.db.models.fields import Field
@@ -10,12 +12,16 @@ from django.db.models.sql.where import WhereNode
 
 from ldapdb.models import LDAPModel
 from ldapdb.utils import escape_ldap_filter_value
-from .lib import LDAPSearch
+from .lib import LDAPSearch, LDAPSearchControlType
+
+if TYPE_CHECKING:
+    from .base import DatabaseWrapper
 
 logger = logging.getLogger(__name__)
 
 
 class SQLCompiler(BaseSQLCompiler):
+    connection: 'DatabaseWrapper'
     DEFAULT_ORDERING_RULE = 'caseIgnoreOrderingMatch'  # rfc3417 / 2.5.13.3
 
     def __init__(self, *args, **kwargs):
@@ -156,24 +162,28 @@ class SQLCompiler(BaseSQLCompiler):
             with_col_aliases=with_col_aliases or bool(self.query.combinator),
         )
 
+        # TODO: Handle slicing on Non-SSSVLV queries
+        if (self.query.low_mark or self.query.high_mark) and not self.connection.features.supports_sssvlv:
+            raise NotSupportedError('Slicing is not supported without VLV control.')
+
         self.ldap_query.attrlist = self._compile_select()
         self.ldap_query.filterstr = self._compile_where()
         self.ldap_query.order_by = self._compile_order_by()  # only used when searching via SSSVLV
+
+        self.ldap_query.offset = self.query.low_mark
+        if with_limits and self.query.high_mark:
+            self.ldap_query.limit = self.query.high_mark - self.query.low_mark
+
+        if self.connection.features.supports_sssvlv:
+            self.ldap_query.control_type = LDAPSearchControlType.SSSVLV
+        elif self.connection.features.supports_simple_paged_results:
+            self.ldap_query.control_type = LDAPSearchControlType.PAGED_RESULTS
+
         return self.ldap_query, ()
 
     def execute_sql(self, result_type=MULTI, chunked_fetch=False, chunk_size=GET_ITERATOR_CHUNK_SIZE):
         logger.debug('SQLCompiler.execute_sql: %s, %s, %s', result_type, chunked_fetch, chunk_size)
         return super().execute_sql(result_type, chunked_fetch, chunk_size)
-
-    def results_iter(
-        self,
-        results=None,
-        tuple_expected=False,
-        chunked_fetch=False,
-        chunk_size=GET_ITERATOR_CHUNK_SIZE,
-    ):
-        logger.debug('SQLCompiler.results_iter: %s, %s, %s, %s', results, tuple_expected, chunked_fetch, chunk_size)
-        return super().results_iter(results)
 
 
 class SQLInsertCompiler(compiler.SQLInsertCompiler, SQLCompiler):
