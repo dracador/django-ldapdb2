@@ -19,3 +19,13 @@ class MultipleLDAPDatasesError(ValueError):
         super().__init__(
             'Multiple LDAP databases found. Please specify a database via Meta.ldap_database or QuerySet.using().'
         )
+
+
+class LDAPModelTypeError(TypeError):
+    def __init__(self, model):
+        super().__init__(f'Expected model to be a subclass of LDAPModel but LDAPModel not in MRO: {model.__mro__}')
+
+
+class LDAPQueryTypeError(TypeError):
+    def __init__(self, query):
+        super().__init__(f'Expected query to be an instance of LDAPQuery, not {type(query)}')

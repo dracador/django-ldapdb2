@@ -1,3 +1,4 @@
+import json
 import logging
 from typing import TYPE_CHECKING
 
@@ -5,7 +6,8 @@ import ldap
 from ldap.controls.sss import SSSRequestControl
 from ldap.controls.vlv import VLVRequestControl
 
-from ldapdb.backends.ldap import LDAPSearch
+from ldapdb.exceptions import LDAPQueryTypeError
+from ldapdb.models import LDAPQuery
 from .lib import LDAPDatabase, LDAPSearchControlType
 
 if TYPE_CHECKING:
@@ -19,7 +21,7 @@ class DatabaseCursor:
 
     def __init__(self, connection):
         self.connection: ReconnectLDAPObject = connection
-        self.ldap_query: LDAPSearch | None = None
+        self.query: LDAPQuery | None = None
         self.description = None
         self.rowcount = -1
         self.arraysize = 1
@@ -28,28 +30,32 @@ class DatabaseCursor:
         self.results: list[tuple[str, dict]] = []
         self._result_iter = iter([])
 
+    @property
+    def search_obj(self):
+        return self.query.ldap_search
+
     def search(self):
-        match self.ldap_query.control_type:
+        match self.search_obj.control_type:
             case LDAPSearchControlType.SSSVLV:
                 logger.debug('DatabaseCursor.search: Using SSSVLV control')
                 return self._execute_with_sssvlv()
-            case LDAPSearchControlType.PAGED_RESULTS:
+            case LDAPSearchControlType.SIMPLE_PAGED_RESULTS:
                 logger.debug('DatabaseCursor.search: Using Paged Results control')
-                return self._execute_with_paging()
+                return self._execute_with_simple_paging()
             case LDAPSearchControlType.NO_CONTROL:
                 logger.debug('DatabaseCursor.search: Using no control - Returning empty list for now!')
                 return self._execute_without_control()
             case _:
-                raise NotImplementedError(f'Control type {self.ldap_query.control_type} not yet implemented')
+                raise NotImplementedError(f'Control type {self.search_obj.control_type} not yet implemented')
 
-    def execute(self, query, *_args, **_params):
+    def execute(self, query: LDAPQuery, *_args, **_params):
         logger.debug('DatabaseCursor.execute: query: %s (%s), params: %s', query, type(query), _params)
         self._check_closed()
 
-        if not isinstance(query, LDAPSearch):
-            raise ValueError('Query object must be an instance of LDAPSearch')
+        if not isinstance(query, LDAPQuery):
+            raise LDAPQueryTypeError(query)
 
-        self.ldap_query = query
+        self.query = query
         self.description = None
         self.rowcount = -1
         self.lastrowid = None
@@ -66,15 +72,15 @@ class DatabaseCursor:
     def _execute_without_control(self):
         raise NotImplementedError()
 
-    def _execute_with_paging(self, timeout: int = -1):
+    def _execute_with_simple_paging(self, timeout: int = -1):
         raise NotImplementedError()
 
     def _execute_with_sssvlv(self, timeout: int = -1):
-        assert self.ldap_query.order_by, 'SSSVLV control requires order_by fields to be set'
+        assert self.search_obj.ordering_rules, 'SSSVLV control requires ordering_rules fields to be set'
 
-        sss_ordering_rules = [f'{attr}:{order_rule}' for attr, order_rule in self.ldap_query.order_by]
+        sss_ordering_rules = [f'{attr}:{order_rule}' for attr, order_rule in self.search_obj.ordering_rules]
         logger.debug('DatabaseCursor._execute_with_sssvlv: Ordering rules: %s', sss_ordering_rules)
-        sss_ctrl = SSSRequestControl(ordering_rules=sss_ordering_rules)
+        sss_ctrl = SSSRequestControl(criticality=True, ordering_rules=sss_ordering_rules)
 
         # Not sure if we want to keep track of the context_id and offset/content_count here,
         # since we could have a more lazy iterator when using this with fetchmany.
@@ -84,56 +90,70 @@ class DatabaseCursor:
         vlv_offset = None
         vlv_content_count = None
 
-        if vlv_offset is None and self.ldap_query.offset:
-            vlv_offset = self.ldap_query.offset + 1  # VLV uses 1-based indexing
+        if vlv_offset is None and self.search_obj.offset:
+            vlv_offset = self.search_obj.offset + 1  # VLV uses 1-based indexing
 
-        if self.ldap_query.limit:
-            vlv_content_count = self.ldap_query.limit
+        if self.search_obj.limit:
+            vlv_content_count = self.search_obj.limit
+
+        limit = self.search_obj.limit - 1 if self.search_obj.limit else 10000000
 
         vlv_ctrl = VLVRequestControl(
             criticality=True,
             before_count=0,
-            after_count=self.ldap_query.limit - 1 if self.ldap_query.limit else 0,
-            offset=vlv_offset,
-            content_count=vlv_content_count,
-            greater_than_or_equal=None if vlv_offset and vlv_content_count else 10000,  # just a basic fallback value
+            after_count=limit,  # should be page_size
+            offset=vlv_offset or 1,
+            content_count=vlv_content_count or 0,
+            # greater_than_or_equal=None if vlv_offset and vlv_content_count else 10000,  # just a basic fallback value
             context_id=vlv_context_id,
         )
 
         serverctrls = [sss_ctrl, vlv_ctrl]
 
-        logger.debug('DatabaseCursor._execute_with_sssvlv: Serialized Search: %s', self.ldap_query.serialize())
+        logger.debug(
+            'DatabaseCursor._execute_with_sssvlv:\nLDAPSearch: %s\nSSSConfig: %s\nVLVConfig: %s\n',
+            self.search_obj.as_json(),
+            json.dumps(sss_ctrl.__dict__, indent=4, sort_keys=True),
+            json.dumps(vlv_ctrl.__dict__, indent=4, sort_keys=True),
+        )
 
         msgid = self.connection.search_ext(
-            base=self.ldap_query.base,
-            scope=self.ldap_query.scope,
-            filterstr=self.ldap_query.filterstr,
-            attrlist=self.ldap_query.attrlist,
+            base=self.search_obj.base,
+            scope=self.search_obj.scope,
+            filterstr=self.search_obj.filterstr,
+            attrlist=self.search_obj.attrlist_without_dn,
             serverctrls=serverctrls,
             timeout=timeout,
         )
 
         rtype, rdata, rmsgid, serverctrls = self.connection.result3(msgid)
+        logger.debug('DatabaseCursor._execute_with_sssvlv - Result: length: %s, results: %s', len(rdata), rdata)
         return rdata
 
     def set_description(self):
         if self.results:
-            field_names = self.ldap_query.attrlist
+            field_names = [
+                field.column
+                for field in self.query.model._meta.get_fields()
+                if field.column in self.search_obj.attrlist
+            ]
             self.description = [(attr, None, None, None, None, None, None) for attr in field_names]
         else:
             self.description = []
 
     def format_results(self):
-        results = []
         column_names = [col[0] for col in self.description]
 
+        logger.debug('format_results(): column_names: %s', column_names)
+
+        results = []
         for dn, attributes in self.results:
             row_data = {}
             for attr_name in column_names:
                 if attr_name == 'dn':
                     row_data['dn'] = [dn]
                 else:
-                    row_data[attr_name] = attributes.get(attr_name, [None])
+                    row_data[attr_name] = attributes.get(attr_name, None)
 
             # sort rows in the correct order that is defined by the column names in description<
             row = tuple(row_data[col] for col in column_names)
@@ -179,6 +199,6 @@ class DatabaseCursor:
         logger.debug('DatabaseCursor.close: Closing cursor')
         self.connection = None
         self.closed = True
-        self.ldap_query = None
+        self.query = None
         self.results = []
         self._result_iter = iter([])

@@ -10,7 +10,8 @@ from django.db.models.sql.compiler import SQLCompiler as BaseSQLCompiler
 from django.db.models.sql.constants import GET_ITERATOR_CHUNK_SIZE, MULTI
 from django.db.models.sql.where import WhereNode
 
-from ldapdb.models import LDAPModel
+from ldapdb.exceptions import LDAPModelTypeError, LDAPQueryTypeError
+from ldapdb.models import LDAPModel, LDAPQuery
 from ldapdb.utils import escape_ldap_filter_value
 from .lib import LDAPSearch, LDAPSearchControlType
 
@@ -22,29 +23,31 @@ logger = logging.getLogger(__name__)
 
 class SQLCompiler(BaseSQLCompiler):
     connection: 'DatabaseWrapper'
+    query: LDAPQuery
     DEFAULT_ORDERING_RULE = 'caseIgnoreOrderingMatch'  # rfc3417 / 2.5.13.3
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+        if not isinstance(self.query, LDAPQuery):
+            raise LDAPQueryTypeError(self.query)
+
         model = self.query.model
-        if issubclass(model, LDAPModel):
-            self.ldap_query = LDAPSearch(base=model.base_dn, scope=model.search_scope)
-        else:
-            raise TypeError(f'Expected model to be a subclass of LDAPModel but LDAPModel not in MRO: {model.__mro__}')
+        if not issubclass(model, LDAPModel):
+            raise LDAPModelTypeError(model)
 
-        self.field_mapping = {field.attname: field.column for field in self.query.model._meta.fields}
-        self.reverse_field_mapping = {field.column: field for field in self.query.model._meta.fields}
+        self.field_mapping = {field.attname: field.column for field in model._meta.fields}
+        self.reverse_field_mapping = {field.column: field for field in model._meta.fields}
 
-    def _compile_select(self) -> set[str]:
-        # TODO: Implement annotations & Related fields
-        selected_fields = set()
+    def _compile_select(self) -> list[str]:
+        # TODO: Implement annotations & Related fields. Make sure the order of fields is correct!
+        selected_fields = []
 
         for select_info in self.query.select:
             if hasattr(select_info, 'target'):
                 field = select_info.target
                 field_name = field.attname
-                selected_fields.add(field_name)
+                selected_fields.append(field_name)
 
         # if self.query.annotations:
         #     selected_fields.update(self.query.annotations.keys())
@@ -52,7 +55,7 @@ class SQLCompiler(BaseSQLCompiler):
         if selected_fields:
             selected_columns = {self.field_mapping[field_name] for field_name in selected_fields}
         else:
-            selected_columns = set(self.field_mapping.values())
+            selected_columns = list(self.field_mapping.values())
 
         logger.debug('Selected LDAP attributes for query: %s', selected_columns)
         return selected_columns
@@ -167,7 +170,25 @@ class SQLCompiler(BaseSQLCompiler):
         logger.debug('Order by fields for LDAP query: %s', ordering_rules)
         return ordering_rules
 
-    def as_sql(self, with_limits=True, with_col_aliases=False) -> tuple[LDAPSearch, tuple]:
+    def _build_ldap_search(self, with_limits):
+        ldap_search = LDAPSearch(
+            base=self.query.model.base_dn,
+            scope=self.query.model.search_scope,
+            attrlist=self._compile_select(),
+            filterstr=self._compile_where(),
+            ordering_rules=self._compile_order_by(),  # only used when searching via SSSVLV for now
+            offset=self.query.low_mark,
+        )
+        if with_limits and self.query.high_mark:
+            ldap_search.limit = self.query.high_mark - self.query.low_mark
+
+        if self.connection.features.supports_sssvlv:
+            ldap_search.control_type = LDAPSearchControlType.SSSVLV
+        elif self.connection.features.supports_simple_paged_results:
+            ldap_search.control_type = LDAPSearchControlType.SIMPLE_PAGED_RESULTS
+        return ldap_search
+
+    def as_sql(self, with_limits=True, with_col_aliases=False) -> tuple[LDAPQuery, tuple]:
         logger.debug('SQLCompiler.as_sql: with_limits=%s, with_col_aliases=%s', with_limits, with_col_aliases)
 
         # Run pre_sql_setup to make sure self.has_extra_select is set
@@ -179,20 +200,10 @@ class SQLCompiler(BaseSQLCompiler):
         if (self.query.low_mark or self.query.high_mark) and not self.connection.features.supports_sssvlv:
             raise NotSupportedError('Slicing is not supported without VLV control.')
 
-        self.ldap_query.attrlist = self._compile_select()
-        self.ldap_query.filterstr = self._compile_where()
-        self.ldap_query.order_by = self._compile_order_by()  # only used when searching via SSSVLV
+        self.query.ldap_search = self._build_ldap_search(with_limits)
 
-        self.ldap_query.offset = self.query.low_mark
-        if with_limits and self.query.high_mark:
-            self.ldap_query.limit = self.query.high_mark - self.query.low_mark
-
-        if self.connection.features.supports_sssvlv:
-            self.ldap_query.control_type = LDAPSearchControlType.SSSVLV
-        elif self.connection.features.supports_simple_paged_results:
-            self.ldap_query.control_type = LDAPSearchControlType.PAGED_RESULTS
-
-        return self.ldap_query, ()
+        # Normally returns "sql, params" but we want the whole query instance passed to the cursors execute() method
+        return self.query, ()
 
     def execute_sql(self, result_type=MULTI, chunked_fetch=False, chunk_size=GET_ITERATOR_CHUNK_SIZE):
         logger.debug('SQLCompiler.execute_sql: %s, %s, %s', result_type, chunked_fetch, chunk_size)
