@@ -2,6 +2,7 @@ from typing import TYPE_CHECKING
 
 import ldap
 from django.db.models import QuerySet
+from django.forms import model_to_dict
 from django.test import TestCase
 from ldapdb.backends.ldap import LDAPSearch, LDAPSearchControlType
 
@@ -65,3 +66,25 @@ class LDAPTestCase(TestCase):
 
         # Using .serialize() here allows assertEqual to provide a more detailed error message
         self.assertEqual(expected_ldap_search.serialize(), generated_ldap_search.serialize())
+
+    def assertLDAPModelObjectsAreEqual(
+        self,
+        left_model_instance: LDAPUser,  # Should be a constant from constants.py (or a dict with fields)
+        right_model_instance: LDAPUser | dict,  # Should be a model instance from the database or a dict with fields
+        fields: list[str] = None,
+        exclude: list[str] = None,
+    ):
+        if isinstance(left_model_instance, dict):
+            dict_from_a = left_model_instance
+        else:
+            dict_from_a = model_to_dict(left_model_instance, fields=fields, exclude=exclude)
+
+        if isinstance(right_model_instance, dict):
+            dict_from_b = right_model_instance
+        else:
+            dict_from_b = model_to_dict(right_model_instance, fields=fields, exclude=exclude)
+
+        # XXX: TEMPORARY! Remove this line when we're able to transform LDAP search results the correct way
+        dict_from_b = transform_ldap_model_dict(dict_from_b)
+
+        self.assertDictEqual(dict_from_a, dict_from_b)
