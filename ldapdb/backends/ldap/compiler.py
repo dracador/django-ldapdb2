@@ -40,20 +40,30 @@ class SQLCompiler(BaseSQLCompiler):
         self.reverse_field_mapping = {field.column: field for field in model._meta.fields}
 
     def _compile_select(self) -> list[str]:
-        # TODO: Implement annotations & Related fields. Make sure the order of fields is correct!
+        """
+        Compile the SELECT part of the query.
+        This is used to determine which attributes are fetched from the server.
+
+        The order in which the selected_fields are returned is very important here.
+        Otherwise the instanced LDAPModel objects might have the values of their fields swapped.
+
+        TODO: Implement annotations & Related fields
+
+        :return: An ordered list of LDAP attribute names to fetch.
+        """
         selected_fields = []
 
-        for select_info in self.query.select:
-            if hasattr(select_info, 'target'):
-                field = select_info.target
-                field_name = field.attname
-                selected_fields.append(field_name)
-
-        # if self.query.annotations:
-        #     selected_fields.update(self.query.annotations.keys())
+        if self.query.values_select:
+            selected_fields = self.query.values_select
+        else:
+            for select_info in self.query.select:
+                if hasattr(select_info, 'target'):
+                    field = select_info.target
+                    field_name = field.attname
+                    selected_fields.append(field_name)
 
         if selected_fields:
-            selected_columns = {self.field_mapping[field_name] for field_name in selected_fields}
+            selected_columns = [self.field_mapping[field_name] for field_name in selected_fields]
         else:
             selected_columns = list(self.field_mapping.values())
 

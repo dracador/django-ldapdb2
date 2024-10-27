@@ -133,12 +133,5 @@ class QueryResolverTestCase(LDAPTestCase):
         unordered_fields_subset = ['mail', 'name', 'username', 'dn']
 
         for _ in range(200):
-            # FIXME: This test currently fails!
-            #  {
-            #      "mail": "uid=user1,ou=Users,dc=example,dc=org",
-            #      "name": "user1",
-            #      "username": "User One",
-            #      "dn": "user.one@example.org"
-            #  }
             obj = LDAPUser.objects.filter(username=TEST_LDAP_USER_1.username).values(*unordered_fields_subset).first()
             self.assertLDAPModelObjectsAreEqual(TEST_LDAP_USER_1, obj, fields=unordered_fields_subset)

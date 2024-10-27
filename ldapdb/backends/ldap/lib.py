@@ -43,8 +43,6 @@ class LDAPSearch:
                        When using SSSVLV, this will be offset+1, since it's using 1-based indexing.
         :type offset: int
         """
-        if attrlist is None:
-            attrlist = []
         self.base = base
         self.filterstr = filterstr
         self.attrlist = attrlist or []
@@ -69,7 +67,6 @@ class LDAPSearch:
     def serialize(self):
         return {
             'attrlist': sorted(self.attrlist),
-            'attrlist_without_dn': sorted(self.attrlist_without_dn),
             'base': self.base,
             'control_type': self.control_type,
             'filterstr': self.filterstr,

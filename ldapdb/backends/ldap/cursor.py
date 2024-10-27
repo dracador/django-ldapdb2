@@ -132,19 +132,12 @@ class DatabaseCursor:
 
     def set_description(self):
         if self.results:
-            field_names = [
-                field.column
-                for field in self.query.model._meta.get_fields()
-                if field.column in self.search_obj.attrlist
-            ]
-            self.description = [(attr, None, None, None, None, None, None) for attr in field_names]
+            self.description = [(attr, None, None, None, None, None, None) for attr in self.search_obj.attrlist]
         else:
             self.description = []
 
     def format_results(self):
         column_names = [col[0] for col in self.description]
-
-        logger.debug('format_results(): column_names: %s', column_names)
 
         results = []
         for dn, attributes in self.results:
