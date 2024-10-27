@@ -50,6 +50,13 @@ class QueryResolverTestCase(LDAPTestCase):
         expected_ldap_search = get_new_ldap_search()
         self.assertLDAPSearchIsEqual(queryset, expected_ldap_search)
 
+    def test_ldapuser_get(self):
+        obj = self._get_user_1_object()
+        self.assertLDAPModelObjectsAreEqual(TEST_LDAP_USER_1, obj)
+
+    def test_ldapuser_exists(self):
+        self.assertTrue(LDAPUser.objects.all().exists())
+
     def test_ldapuser_filter_exclude(self):
         queryset = LDAPUser.objects.filter(name='User').exclude(username='admin', name='OtherUser')
         expected_ldap_search = get_new_ldap_search(filterstr='(&(cn=User)(!(&(cn=OtherUser)(uid=admin))))')
