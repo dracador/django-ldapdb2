@@ -19,6 +19,7 @@ class QueryResolverTestCase(LDAPTestCase):
 
     --- Ordering ---
     X LDAPUser.objects.all().order_by('uid')
+    LDAPUser.objects.all().order_by('dn') - optional, since we'd have to implement custom sorting for this
 
     --- Values ---
     X LDAPUser.objects.all().values('uid', 'cn')
