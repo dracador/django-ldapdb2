@@ -1,7 +1,5 @@
-from django.forms import model_to_dict
-
 from example.models import LDAPUser
-from .base import LDAPTestCase, get_new_ldap_search, transform_ldap_model_dict
+from .base import LDAPTestCase, get_new_ldap_search
 from .constants import TEST_LDAP_USER_1
 
 
