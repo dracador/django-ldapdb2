@@ -1,7 +1,38 @@
+from typing import TYPE_CHECKING
+
 import ldap
 from django.db import models as django_models
+from django.db.models import QuerySet
+from django.db.models.sql import Query
 
+from .exceptions import LDAPModelTypeError
 from .fields import DistinguishedNameField
+
+if TYPE_CHECKING:
+    from .backends.ldap import LDAPSearch
+
+
+class LDAPQuery(Query):
+    model: 'LDAPModel'
+
+    def __init__(self, model, **kwargs):
+        super().__init__(model, **kwargs)
+
+        if not issubclass(model, LDAPModel):
+            raise LDAPModelTypeError(model)
+
+        self.ldap_search: LDAPSearch | None = None
+
+
+class LDAPQuerySet(QuerySet):
+    def __init__(self, model=None, query=None, using=None, hints=None):
+        if query is None:
+            query = LDAPQuery(model)
+        super().__init__(model=model, query=query, using=using, hints=hints)
+
+    def raw(self, *_args, **_kwargs):
+        # Maybe allow raw to take an LDIF input or an LDAPSearch instance?
+        raise AssertionError('Raw queries not supported with LDAP backend')
 
 
 class LDAPModel(django_models.Model):
@@ -9,6 +40,8 @@ class LDAPModel(django_models.Model):
     base_filter: str = '(objectClass=*)'
     search_scope: int = ldap.SCOPE_SUBTREE
     object_classes: list[str] = ['top']
+
+    objects = LDAPQuerySet.as_manager()
 
     dn = DistinguishedNameField(db_column='dn', unique=True, editable=False, hidden=True)
 
