@@ -12,6 +12,7 @@ dependencies = [
 [tool.uv]
 dev-dependencies = [
     "django-stubs",
+    "faker>=30.8.1",
     "ruff",
 ]
 
