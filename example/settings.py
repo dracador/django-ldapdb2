@@ -91,6 +91,7 @@ DATABASES = {
         },
         'TEST': {
             'DEPENDENCIES': [],  # 'ldap' has no dependencies
+            'MIGRATE': False,
         },
     },
 }
