@@ -1,3 +1,5 @@
+from typing import TYPE_CHECKING
+
 import ldap
 from django.db.models import QuerySet
 from django.test import TestCase
@@ -5,10 +7,14 @@ from ldapdb.backends.ldap import LDAPSearch, LDAPSearchControlType
 
 from example.models import LDAPUser
 
+if TYPE_CHECKING:
+    from ldapdb.models import LDAPQuery
 
-def queryset_to_ldap_search(queryset: QuerySet):
+
+def queryset_to_ldap_search(queryset: QuerySet) -> LDAPSearch:
     sql_compiler = queryset.query.get_compiler(using=queryset.db)
-    return sql_compiler.as_sql()[0]
+    query: LDAPQuery = sql_compiler.as_sql()[0]
+    return query.ldap_search
 
 
 def get_new_ldap_search(
@@ -32,7 +38,7 @@ def get_new_ldap_search(
         filterstr=filterstr or LDAPUser.base_filter,
         limit=limit,
         offset=offset,
-        ordering_rules=ordering_rules,
+        ordering_rules=ordering_rules or [('uid', 'caseIgnoreOrderingMatch')],  # Default to pk field for SSSVLV
         scope=scope or ldap.SCOPE_SUBTREE,
     )
 
