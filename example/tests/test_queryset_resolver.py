@@ -1,5 +1,8 @@
+from django.forms import model_to_dict
+
 from example.models import LDAPUser
-from .base import LDAPTestCase, get_new_ldap_search
+from .base import LDAPTestCase, get_new_ldap_search, transform_ldap_model_dict
+from .constants import TEST_LDAP_USER_1
 
 
 class QueryResolverTestCase(LDAPTestCase):
@@ -7,7 +10,8 @@ class QueryResolverTestCase(LDAPTestCase):
     TODO: Implement the following test cases:
     --- Basic ---
     X LDAPUser.objects.all()
-    LDAPUser.objects.all().exists()
+    X LDAPUser.objects.get(username='user1')
+    X LDAPUser.objects.all().exists()
     X LDAPUser.objects.filter(uid='test')
     X LDAPUser.objects.filter(uid__lookup='test')
     X LDAPUser.objects.filter(uid__in=['test1', 'test2'])
@@ -44,6 +48,10 @@ class QueryResolverTestCase(LDAPTestCase):
     --- Renaming ---
     u = LDAPUser.objects.get(uid='test'); u.uid = 'test_renamed'; u.save()
     """
+
+    @staticmethod
+    def _get_user_1_object():
+        return LDAPUser.objects.get(username=TEST_LDAP_USER_1.username)
 
     def test_ldapuser_all(self):
         queryset = LDAPUser.objects.all()
@@ -102,3 +110,37 @@ class QueryResolverTestCase(LDAPTestCase):
         expected_ldap_search = get_new_ldap_search(attrlist=['uid'])
         self.assertLDAPSearchIsEqual(queryset, expected_ldap_search)
         self.assertTrue(queryset)
+
+    def test_model_field_order(self):
+        """
+        This test is supposed to be run a lot of times to ensure the order of fields is correct
+
+        Why this might even be an issue:
+        Normally, Django requires the attributes returned by the Cursor via Cursor.description to be in the same order
+        as the fields in the model as returned by model._meta.get_fields().
+        This is not the case with LDAP, since we can't guarantee the order of attributes in the search results,
+        especially since "dn" behaves differently than other attributes.
+
+        We'll have to run this a lot of times, since the field order might be correct by chance,
+        even if the implementation is faulty.
+        """
+
+        for _ in range(200):
+            self.test_ldapuser_get()
+
+    def test_model_field_order_with_specific_fields(self):
+        """See test_model_field_order()"""
+
+        # The order of these fields should *not* be the one from model._meta.get_fields()
+        unordered_fields_subset = ['mail', 'name', 'username', 'dn']
+
+        for _ in range(200):
+            # FIXME: This test currently fails!
+            #  {
+            #      "mail": "uid=user1,ou=Users,dc=example,dc=org",
+            #      "name": "user1",
+            #      "username": "User One",
+            #      "dn": "user.one@example.org"
+            #  }
+            obj = LDAPUser.objects.filter(username=TEST_LDAP_USER_1.username).values(*unordered_fields_subset).first()
+            self.assertLDAPModelObjectsAreEqual(TEST_LDAP_USER_1, obj, fields=unordered_fields_subset)

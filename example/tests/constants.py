@@ -1,6 +1,7 @@
 from example.models import LDAPUser
 
-# TODO: Maybe use these constants or some kind of factory to create test data in the future?
+# TODO: Maybe use generator.generate_ldap_user() and even use it to create the initial LDIF for server?
+
 
 TEST_LDAP_ADMIN_USER_1 = LDAPUser(
     dn='uid=admin,ou=Users,dc=example,dc=org',
