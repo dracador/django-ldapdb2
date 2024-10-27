@@ -48,6 +48,7 @@ class LDAPModel(django_models.Model):
     class Meta:
         abstract = True
         managed = False
+        ordering = ('dn',)
 
     @classmethod
     def _check_required_attrs(cls):
