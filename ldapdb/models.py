@@ -48,6 +48,7 @@ class LDAPModel(django_models.Model):
     class Meta:
         abstract = True
         managed = False
+        base_manager_name = 'objects'  # force base manager to use LDAPQuery instances
         #  ordering = ('dn',)  - TODO: Allow ordering by dn, even if it's the same as the pk field?
 
     @classmethod

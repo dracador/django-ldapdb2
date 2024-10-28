@@ -137,9 +137,6 @@ class QueryResolverTestCase(LDAPTestCase):
             self.assertLDAPModelObjectsAreEqual(TEST_LDAP_USER_1, obj, fields=unordered_fields_subset)
 
     def test_refresh_from_db(self):
-        # TODO:
-        #  Raises ldapdb.exceptions.LDAPQueryTypeError:
-        #  Expected query to be an instance of LDAPQuery, not <class 'django.db.models.sql.query.Query'>
         obj = self._get_user_1_object()
         obj.username = 'new_username'
         obj.refresh_from_db()
