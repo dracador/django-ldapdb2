@@ -1,14 +1,64 @@
 from typing import TYPE_CHECKING
 
-from django.db.models import fields as django_fields
+from django.db.models import fields as dj_fields
 
 from .validators import validate_dn
 
 if TYPE_CHECKING:
-    from .backends.ldap.base import DatabaseWrapper
+    # hack to make type checkers happy
+    TypeProxyField = dj_fields.Field
+else:
+    TypeProxyField = object
 
 
-class LdapField(django_fields.Field):
+"""
+TODO: Implement the following fields if they make sense
+Done:
+- CharField
+- TextField
+- IntegerField
+- FloatField
+- DecimalField
+- BooleanField
+- EmailField
+- BinaryField
+
+Not fully implemented:
+- ListField
+- DateField
+- DateTimeField
+- TimeField
+
+- URLField
+- UUIDField
+- SlugField
+- PositiveIntegerField
+- PositiveSmallIntegerField
+- ManyToManyField
+- OneToOneField
+- ForeignKey
+- GenericIPAddressField
+- JSONField
+- DurationField
+"""
+
+
+class LDAPFieldMixin(TypeProxyField):
+    """
+    Base class for all LDAP fields.
+    You can opt to subclass this class and handle how the field gets populated.
+
+    Most of Djangos fields actually work without having to subclass LDAPField.
+    To make sure we give users a single point of entry for all available LDAP fields,
+    we subclass all Django fields here.
+
+    We'll have to make sure that all lookups are either supported or raise an error.
+
+    :param binary_field: If True, the field is a binary field.
+    :param multi_valued_field: If True, the field is a multi-valued field.
+    :param ordering_rule: The LDAP ordering rule for this field. Is only used when using Server Side Sorting.
+    """
+
     binary_field: bool = False
     multi_valued_field: bool = False
     ordering_rule: str | None = None
@@ -28,51 +78,98 @@ class LdapField(django_fields.Field):
         if ordering_rule:
             self.ordering_rule = ordering_rule
 
-    def get_db_prep_value(self, value, *_args, prepared=False, **_kwargs):
-        """Prepare a value for DB interaction.
+    @property
+    def non_db_attrs(self):
+        return super().non_db_attrs + ('binary_field', 'multi_valued_field', 'ordering_rule')
 
-        Returns:
-        - list(bytes) if not prepared
-        - list(str) if prepared
+    @classmethod
+    def _decode_value(
+        cls, value: bytes | str | list[bytes | str] | None, charset='utf-8'
+    ) -> str | list[bytes | str] | None:
+        if value is None or isinstance(value, str):
+            return value
+        if isinstance(value, list):
+            return [cls._decode_value(v) for v in value]
+        return value.decode(charset)
+
+    def from_db_value(self, value, _expression, connection):
+        if not self.binary_field:
+            value = self._decode_value(value, connection.charset)
+
+        if value is None and self.has_default():
+            value = self.get_default()
+
+        return self.to_python(value)
+
+    def to_python(self, value: str | list[str] | None) -> str | list[str] | None:
         """
-        if prepared:
+        We're returning non-existing fields as None here but django-ldapdb returns an empty string.
+        With our current implementation we'd be able to create new objects with only a subset of attributes.
+        Not sure if we want to break or keep the django-ldapdb behavior. Maybe make it configurable?
+
+        TODO: Write tests for all fields.
+        Maybe take inspiration from django-firebird?:
+        https://github.com/maxirobaina/django-firebird/tree/master/tests/test_main/model_fields
+        """
+        if value is None:
+            return [] if self.multi_valued_field else ''
+
+        if self.multi_valued_field:
             return value
 
-        if value is None:
-            return []
+        if isinstance(value, list) and value:
+            return value[0]
 
-        values = value if self.multi_valued_field else [value]
-        prepared_values = [self.get_prep_value(v) for v in values]
-
-        # Remove duplicates.
-        # https://tools.ietf.org/html/rfc4511#section-4.1.7 :
-        # "The set of attribute values is unordered."
-        # We keep those values sorted in natural order to avoid useless
-        # updates to the LDAP server.
-        return sorted({v for v in prepared_values if v})
-
-    def get_db_prep_save(self, value, connection: 'DatabaseWrapper'):
-        values = self.get_db_prep_value(value, connection, prepared=False)
-        if self.binary_field:
-            # Already raw values; don't encode it twice.
-            return values
-        else:
-            return [v.encode() for v in values]
+        return value
 
 
-class CharField(django_fields.CharField, LdapField):
+class CharField(LDAPFieldMixin, dj_fields.CharField):
     def __init__(self, *args, **kwargs):
         defaults = {'max_length': 200}
         defaults.update(kwargs)
         super().__init__(*args, **defaults)
 
-    @staticmethod
-    def from_ldap(value, connection: 'DatabaseWrapper'):
-        if len(value) == 0:
-            return ''
-        else:
-            return value[0].decode(connection.charset)
+
+class TextField(CharField):
+    pass  # just the same thing as CharField in LDAP
 
 
 class DistinguishedNameField(CharField):
     default_validators = [validate_dn]
+
+
+class IntegerField(LDAPFieldMixin, dj_fields.IntegerField):
+    pass
+
+
+class FloatField(LDAPFieldMixin, dj_fields.FloatField):
+    pass
+
+
+class DecimalField(LDAPFieldMixin, dj_fields.DecimalField):
+    pass
+
+
+class BooleanField(LDAPFieldMixin, dj_fields.BooleanField):
+    pass
+
+
+class EmailField(LDAPFieldMixin, dj_fields.EmailField):
+    pass
+
+
+class ImageField(LDAPFieldMixin, dj_fields.BinaryField):
+    # No need to use djangos ImageField, as it's just a BinaryField.
+    # When using this field, you'll have to handle the image data yourself.
+    binary_field = True
+
+
+class ListField(LDAPFieldMixin, dj_fields.Field):
+    default = []
+    multi_valued_field = True
+
+
+class DateField(dj_fields.DateField):
+    def __init__(self, *args, fmt='%Y-%m-%d', **kwargs):
+        self.date_format = fmt
+        super().__init__(*args, **kwargs)
