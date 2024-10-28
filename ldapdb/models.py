@@ -37,9 +37,9 @@ class LDAPQuerySet(QuerySet):
 
 class LDAPModel(django_models.Model):
     base_dn: str = None
-    base_filter: str = '(objectClass=*)'
+    base_filter: str = '(objectClass=*)'  # the base filter will be always be applied to all queries
     search_scope: int = ldap.SCOPE_SUBTREE
-    object_classes: list[str] = ['top']
+    object_classes: list[str] = ['top']  # TODO: object_classes should be a ListField of some sort
 
     objects = LDAPQuerySet.as_manager()
 
@@ -48,7 +48,7 @@ class LDAPModel(django_models.Model):
     class Meta:
         abstract = True
         managed = False
-        ordering = ('dn',)
+        #  ordering = ('dn',)  - TODO: Allow ordering by dn, even if it's the same as the pk field?
 
     @classmethod
     def _check_required_attrs(cls):

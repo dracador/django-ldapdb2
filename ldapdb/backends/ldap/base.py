@@ -37,7 +37,7 @@ class DatabaseWrapper(BaseDatabaseWrapper):
     operators = {
         'exact': '=%s',
         'contains': '=*%s*',
-        'in': '=*%s*',  # has to be overridden in ListFields to use =%s
+        'in': '=*%s*',  # TODO: Make sure CharField__in and ListField__in handle these differently
         'gt': '>%s',
         'gte': '>=%s',
         'lt': '<%s',
