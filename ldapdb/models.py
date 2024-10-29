@@ -47,24 +47,37 @@ class LDAPModel(django_models.Model):
 
     class Meta:
         abstract = True
-        managed = False
-        base_manager_name = 'objects'  # force base manager to use LDAPQuery instances
-        #  ordering = ('dn',)  - TODO: Allow ordering by dn, even if it's the same as the pk field?
+
+        # Force base manager to use LDAPQuery instances.
+        # Will also trickle down to subclasses without them having it explicitly set in model._meta.
+        base_manager_name = 'objects'
 
     @classmethod
     def _check_required_attrs(cls):
-        for required_attribute in ['base_dn', 'object_classes']:
-            if not getattr(cls, required_attribute, None):
-                raise ValueError(f'{cls.__name__} is missing the required attribute {required_attribute}')
+        if not cls._meta.abstract:
+            for required_attribute in ['base_dn', 'object_classes']:
+                if not getattr(cls, required_attribute, None):
+                    raise ValueError(f'{cls.__name__} is missing the required attribute {required_attribute}')
 
+    @classmethod
+    def _check_non_abstract_inheritance(cls):
+        """
+        This function is to make sure no non-abstract Django model is subclassed.
+        The default Django behavior is to create a new table for each subclass and reference the parent model
+        via an automatically generated OneToOneField.
+        Since we don't have tables in LDAP, we don't want to allow this behavior.
+        Users will have to opt to using abstract models instead.
+        """
+        for base in cls.__bases__:
+            if issubclass(base, django_models.Model) and not base._meta.abstract and base != django_models.Model:
+                raise TypeError(
+                    f'Cannot subclass non-abstract model "{base.__name__}" in "{cls.__name__}". '
+                    'Only abstract models can be subclassed in this LDAP backend.'
+                )
+
+    @classmethod
     def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+
+        cls._check_non_abstract_inheritance()
         cls._check_required_attrs()
-
-        # We want to set managed to False for all LDAP models but don't want to force the user to do it themselves
-        if not hasattr(cls, 'Meta'):
-            cls.Meta = type('Meta', (), {'managed': False})
-
-        if getattr(cls.Meta, 'managed', False):
-            raise ValueError(f'{cls.__name__} has Meta.managed set to True. This is not allowed for LDAP models.')
-        else:
-            cls.Meta.managed = False
