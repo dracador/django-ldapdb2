@@ -138,6 +138,6 @@ class QueryResolverTestCase(LDAPTestCase):
 
     def test_refresh_from_db(self):
         obj = self._get_user_1_object()
-        obj.username = 'new_username'
+        obj.name = 'New name'  # Note: Setting the primary key to something else will result in a DoesNotExist error
         obj.refresh_from_db()
         self.assertLDAPModelObjectsAreEqual(TEST_LDAP_USER_1, obj)
