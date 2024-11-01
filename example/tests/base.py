@@ -112,9 +112,6 @@ class LDAPTestCase(TestCase):
         else:
             dict_from_b = full_model_to_dict(right_model_instance, fields=fields, exclude=exclude)
 
-        # XXX: TEMPORARY! Remove this line when we're able to transform LDAP search results the correct way
-        dict_from_b = transform_ldap_model_dict(dict_from_b)
-
         self.assertDictEqual(dict_from_a, dict_from_b)
 
 
