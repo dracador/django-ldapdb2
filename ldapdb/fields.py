@@ -66,7 +66,14 @@ class LDAPFieldMixin(TypeProxyField):
     multi_valued_field: bool = False
     ordering_rule: str | None = None
 
-    def __init__(self, *args, ordering_rule: str | None = None, hidden: bool = False, **kwargs):
+    def __init__(
+        self,
+        *args,
+        ordering_rule: str | None = None,
+        hidden: bool = False,
+        multi_valued_field: bool | None = None,
+        **kwargs,
+    ):
         """
         :param args:
         :param ordering_rule: Override the LDAP ordering rule for this field.
@@ -75,10 +82,13 @@ class LDAPFieldMixin(TypeProxyField):
         :param kwargs:
         """
         super().__init__(*args, **kwargs)
-        if hidden:
+        if hidden is not None:
             self.hidden = hidden
 
-        if ordering_rule:
+        if multi_valued_field is not None:
+            self.multi_valued_field = multi_valued_field
+
+        if ordering_rule is not None:
             self.ordering_rule = ordering_rule
 
     @property
@@ -135,6 +145,28 @@ class LDAPFieldMixin(TypeProxyField):
         """
         return value
 
+    def run_validators(self, value):
+        """
+        Override run_validators to make sure we validate individual values if this is a multi_valued_field.
+        """
+        if self.multi_valued_field and isinstance(value, list):
+            for v in value:
+                super().run_validators(v)
+        else:
+            super().run_validators(value)
+
+    def to_python(self, value):
+        """
+        Override to_python to return a list of values instead of casting the whole list to a string when
+        this is a multi_valued_field.
+
+        As per https://datatracker.ietf.org/doc/html/rfc4511#section-4.1.7, the attributes in a list are unsorted,
+        so let's sort them to make it easier to compare them.
+        """
+        if self.multi_valued_field and isinstance(value, list):
+            value = [super().to_python(v) for v in value]
+        return value
+
 
 class CharField(LDAPFieldMixin, dj_fields.CharField):
     def __init__(self, *args, **kwargs):
@@ -184,8 +216,7 @@ class BinaryField(LDAPFieldMixin, dj_fields.BinaryField):
     binary_field = True
 
 
-class ListField(LDAPFieldMixin, dj_fields.Field):
-    default = []
+class MemberField(DistinguishedNameField):
     multi_valued_field = True
 
 

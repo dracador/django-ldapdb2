@@ -1,5 +1,13 @@
 import ldap
-from ldapdb.fields import BinaryField, BooleanField, CharField, EmailField, IntegerField, TextField
+from ldapdb.fields import (
+    BinaryField,
+    BooleanField,
+    CharField,
+    EmailField,
+    IntegerField,
+    MemberField,
+    TextField,
+)
 from ldapdb.models import LDAPModel
 
 
@@ -47,3 +55,18 @@ class LDAPAdminUser(BaseLDAPUser):
 
     class Meta:
         ordering = ('mail',)
+
+
+class LDAPGroup(LDAPModel):
+    base_dn = 'ou=Groups,dc=example,dc=org'
+    base_filter = '(objectClass=groupOfNames)'
+    object_classes = ['groupOfNames']
+
+    name = CharField(db_column='cn', primary_key=True)
+    members = MemberField(db_column='member')
+
+    # Only for demonstration purposes. In praxis you'd probably not use multiple description attributes.
+    descriptions = CharField(db_column='description', multi_valued_field=True)
+
+    class Meta:
+        ordering = ('name',)
