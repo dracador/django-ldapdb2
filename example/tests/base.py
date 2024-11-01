@@ -5,6 +5,8 @@ import ldap
 from django.db.models import QuerySet
 from django.test import TestCase
 from ldapdb.backends.ldap import LDAPSearch, LDAPSearchControlType
+from ldapdb.fields import CharField
+from ldapdb.models import LDAPModel
 
 from example.models import LDAPUser
 
@@ -114,3 +116,18 @@ class LDAPTestCase(TestCase):
         dict_from_b = transform_ldap_model_dict(dict_from_b)
 
         self.assertDictEqual(dict_from_a, dict_from_b)
+
+
+class BaseLDAPTestUser(LDAPModel):
+    """
+    Subset of LDAPUser fields for testing purposes.
+    Until we can order by dn, we need a pk field.
+    """
+
+    base_dn = 'ou=Users,dc=example,dc=org'
+    object_classes = ['inetOrgPerson', 'organizationalPerson']
+
+    username = CharField(db_column='uid', primary_key=True)
+
+    class Meta:
+        abstract = True

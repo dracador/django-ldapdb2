@@ -93,33 +93,43 @@ class LDAPFieldMixin(TypeProxyField):
         return value.decode(charset)
 
     def from_db_value(self, value, _expression, connection):
-        if not self.binary_field:
-            value = self._decode_value(value, connection.charset)
-
-        if value is None and self.has_default():
-            value = self.get_default()
-
-        return self.to_python(value)
-
-    def to_python(self, value: str | list[str] | None) -> str | list[str] | None:
         """
+        # TODO: Return None or '' for non-existing fields?
         We're returning non-existing fields as None here but django-ldapdb returns an empty string.
         With our current implementation we'd be able to create new objects with only a subset of attributes.
         Not sure if we want to break or keep the django-ldapdb behavior. Maybe make it configurable?
+
+        TODO: Maybe move contents of to_python() to from_db_value()?
+        to_python is called in the form cleaning process,
+        but I think we might want to always make sure the values are properly formatted
 
         TODO: Write tests for all fields.
         Maybe take inspiration from django-firebird?:
         https://github.com/maxirobaina/django-firebird/tree/master/tests/test_main/model_fields
         """
+        if not self.binary_field:
+            value = self._decode_value(value, connection.charset)
+
         if value is None:
-            return [] if self.multi_valued_field else ''
+            if self.has_default():
+                return self.get_default()
+            if self.multi_valued_field:
+                return []
 
-        if self.multi_valued_field:
-            return value
+        if isinstance(value, list) and not self.multi_valued_field:
+            value = value[0]
 
-        if isinstance(value, list) and value:
-            return value[0]
+        value = self.from_ldap(value)
+        return self.to_python(value)
 
+    # noinspection PyMethodMayBeStatic
+    def from_ldap(self, value):
+        """
+        Might be overridden in subclasses to handle the value before it gets converted to Python.
+        Example:
+            - Convert a binary field to a base64 encoded string
+            - "TRUE" and "FALSE" to True and False in a BooleanField.
+        """
         return value
 
 
@@ -151,7 +161,14 @@ class DecimalField(LDAPFieldMixin, dj_fields.DecimalField):
 
 
 class BooleanField(LDAPFieldMixin, dj_fields.BooleanField):
-    pass
+    """
+    LDAP stores boolean values as 'TRUE' and 'FALSE'.
+    Returns True if field is 'TRUE', None if field.null=True and 'FALSE' otherwise.
+    Default value is None if field.null=True but can be overridden by setting default=True or False.
+    """
+
+    def from_ldap(self, value):
+        return None if value is None and self.null else value == 'TRUE'
 
 
 class EmailField(LDAPFieldMixin, dj_fields.EmailField):
