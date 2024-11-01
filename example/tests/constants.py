@@ -18,6 +18,7 @@ TEST_LDAP_USER_1 = LDAPUser(
     name='User One',
     username='user1',
     is_active=True,
+    department_number=1,
 )
 
 TEST_LDAP_AVAILABLE_USERS = [TEST_LDAP_ADMIN_USER_1, TEST_LDAP_USER_1]
