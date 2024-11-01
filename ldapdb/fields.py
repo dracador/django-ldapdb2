@@ -94,14 +94,10 @@ class LDAPFieldMixin(TypeProxyField):
 
     def from_db_value(self, value, _expression, connection):
         """
-        # TODO: Return None or '' for non-existing fields?
+        # TODO: Design Decision: Return None or '' for non-existing fields?
         We're returning non-existing fields as None here but django-ldapdb returns an empty string.
         With our current implementation we'd be able to create new objects with only a subset of attributes.
         Not sure if we want to break or keep the django-ldapdb behavior. Maybe make it configurable?
-
-        TODO: Maybe move contents of to_python() to from_db_value()?
-        to_python is called in the form cleaning process,
-        but I think we might want to always make sure the values are properly formatted
 
         TODO: Write tests for all fields.
         Maybe take inspiration from django-firebird?:
@@ -120,7 +116,11 @@ class LDAPFieldMixin(TypeProxyField):
             value = value[0]
 
         value = self.from_ldap(value)
-        return self.to_python(value)
+        if value is None and not self.null:
+            return ''  # See comment in docstring above
+
+        value = self.to_python(value)
+        return value
 
     # noinspection PyMethodMayBeStatic
     def from_ldap(self, value):
