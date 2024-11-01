@@ -39,7 +39,7 @@ class LDAPModel(django_models.Model):
     base_dn: str = None
     base_filter: str = '(objectClass=*)'  # the base filter will be always be applied to all queries
     search_scope: int = ldap.SCOPE_SUBTREE
-    object_classes: list[str] = ['top']  # TODO: object_classes should be a ListField of some sort
+    object_classes: list[str] = None  # TODO: object_classes should be a ListField of some sort
 
     objects = LDAPQuerySet.as_manager()
 
@@ -55,8 +55,8 @@ class LDAPModel(django_models.Model):
     @classmethod
     def _check_required_attrs(cls):
         if not cls._meta.abstract:
-            for required_attribute in ['base_dn', 'object_classes']:
-                if not getattr(cls, required_attribute, None):
+            for required_attribute in ['base_dn', 'object_classes', 'search_scope']:
+                if getattr(cls, required_attribute, None) is None:
                     raise ValueError(f'{cls.__name__} is missing the required attribute {required_attribute}')
 
     @classmethod
