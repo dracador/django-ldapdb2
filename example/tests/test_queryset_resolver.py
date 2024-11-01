@@ -58,7 +58,7 @@ class QueryResolverTestCase(LDAPTestCase):
 
     def test_ldapuser_get(self):
         obj = self._get_user_1_object()
-        self.assertLDAPModelObjectsAreEqual(TEST_LDAP_USER_1, obj)
+        self.assertLDAPModelObjectsAreEqual(TEST_LDAP_USER_1, obj, exclude=['thumbnail_photo'])
 
     def test_ldapuser_exists(self):
         self.assertTrue(LDAPUser.objects.all().exists())
@@ -140,4 +140,4 @@ class QueryResolverTestCase(LDAPTestCase):
         obj = self._get_user_1_object()
         obj.name = 'New name'  # Note: Setting the primary key to something else will result in a DoesNotExist error
         obj.refresh_from_db()
-        self.assertLDAPModelObjectsAreEqual(TEST_LDAP_USER_1, obj)
+        self.assertLDAPModelObjectsAreEqual(TEST_LDAP_USER_1, obj, exclude=['thumbnail_photo'])

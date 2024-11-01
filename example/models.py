@@ -1,5 +1,5 @@
 import ldap
-from ldapdb.fields import BooleanField, CharField, IntegerField
+from ldapdb.fields import BinaryField, BooleanField, CharField, EmailField, IntegerField, TextField
 from ldapdb.models import LDAPModel
 
 
@@ -15,10 +15,12 @@ class BaseLDAPUser(LDAPModel):
     name = CharField(db_column='cn')
     first_name = CharField(db_column='givenName')
     last_name = CharField(db_column='sn')
-    mail = CharField(db_column='mail')
+    mail = EmailField(db_column='mail')
     non_existing_attribute = CharField(db_column='nonExistingAttribute')
     is_active = BooleanField(db_column='x-user-isActive')
     department_number = IntegerField(db_column='departmentNumber')
+    description = TextField(db_column='description')
+    thumbnail_photo = BinaryField(db_column='jpegPhoto')
 
     def __str__(self):
         return self.username

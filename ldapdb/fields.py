@@ -16,12 +16,15 @@ TODO: Implement the following fields if they make sense
 Done:
 - CharField
 - TextField
-- IntegerField
-- FloatField
-- DecimalField
 - BooleanField
 - EmailField
 - BinaryField
+
+Untested:
+- IntegerField
+- FloatField
+- DecimalField
+
 
 Not fully implemented:
 - ListField
@@ -175,7 +178,7 @@ class EmailField(LDAPFieldMixin, dj_fields.EmailField):
     pass
 
 
-class ImageField(LDAPFieldMixin, dj_fields.BinaryField):
+class BinaryField(LDAPFieldMixin, dj_fields.BinaryField):
     # No need to use djangos ImageField, as it's just a BinaryField.
     # When using this field, you'll have to handle the image data yourself.
     binary_field = True
