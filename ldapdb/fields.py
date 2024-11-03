@@ -164,8 +164,8 @@ class LDAPFieldMixin(TypeProxyField):
         so let's sort them to make it easier to compare them.
         """
         if self.multi_valued_field and isinstance(value, list):
-            value = [super().to_python(v) for v in value]
-        return value
+            return [super().to_python(v) for v in value]
+        return super().to_python(value)
 
 
 class CharField(LDAPFieldMixin, dj_fields.CharField):
