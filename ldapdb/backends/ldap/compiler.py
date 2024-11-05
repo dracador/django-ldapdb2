@@ -1,6 +1,7 @@
 import logging
 from typing import TYPE_CHECKING
 
+import ldap
 from django.db import NotSupportedError
 from django.db.models import Lookup
 from django.db.models.expressions import Col
@@ -8,12 +9,13 @@ from django.db.models.fields import Field
 from django.db.models.sql import compiler
 from django.db.models.sql.compiler import SQLCompiler as BaseSQLCompiler
 from django.db.models.sql.constants import GET_ITERATOR_CHUNK_SIZE, MULTI
+from django.db.models.sql.subqueries import InsertQuery, UpdateQuery
 from django.db.models.sql.where import WhereNode
 
 from ldapdb.exceptions import LDAPModelTypeError, LDAPQueryTypeError
 from ldapdb.models import LDAPModel, LDAPQuery
 from ldapdb.utils import escape_ldap_filter_value
-from .lib import LDAPSearch, LDAPSearchControlType
+from .lib import LDAPModList, LDAPSearch, LDAPSearchControlType
 
 if TYPE_CHECKING:
     from .base import DatabaseWrapper
@@ -29,7 +31,7 @@ class SQLCompiler(BaseSQLCompiler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        if not isinstance(self.query, LDAPQuery):
+        if not isinstance(self.query, LDAPQuery) and not isinstance(self.query, UpdateQuery | InsertQuery):
             raise LDAPQueryTypeError(self.query)
 
         model = self.query.model
@@ -221,7 +223,89 @@ class SQLCompiler(BaseSQLCompiler):
 
 
 class SQLInsertCompiler(compiler.SQLInsertCompiler, SQLCompiler):
-    pass
+    def as_sql(self):
+        """
+        Prepare the LDAP-specific data for an add operation.
+        """
+        print(super().as_sql())
+        obj = self.query.objs[0]  # Assuming single object insert
+        if not isinstance(obj, LDAPModel):
+            raise LDAPModelTypeError(obj)
+
+        attributes = self._compile_insert_attributes(obj)
+        print(obj.__dict__)
+        print(attributes)
+        print(obj.get_dn())
+        modlist = list(attributes.items())
+        return modlist, ()
+
+    def _compile_insert_attributes(self, obj):
+        """
+        Compile the attributes from the model instance for an LDAP add operation.
+        """
+        attributes = {}
+        for field in obj._meta.fields:
+            value = getattr(obj, field.attname)
+            if value is not None:
+                attributes[field.column] = field.get_prep_value(value)
+        return attributes
+
+    def execute_sql(self, return_id=False):
+        cursor = self.connection.cursor()
+        query, params = self.as_sql()
+        print(query, params)
+        # cursor.insert(query)
+        if return_id:
+            return cursor.lastrowid
+
+
+class SQLUpdateCompiler(compiler.SQLUpdateCompiler, SQLCompiler):
+    query: UpdateQuery
+
+    def _compile_update_attributes(self):
+        """
+        Compile the attributes for an LDAP modify operation.
+        """
+        attributes = {}
+        for field, _model, val in self.query.values:
+            column_name = self.field_mapping.get(field.attname, field.column)
+            attributes[column_name] = field.get_prep_value(val)
+        return attributes
+
+    def _compile_where(self):
+        base_filter = getattr(self.query.model, 'base_filter', '(objectClass=*)')
+        where_node = self.query.where
+        if not where_node:
+            return base_filter
+
+        ldap_filter = self._where_node_to_ldap_filter(where_node)
+        ldap_filter = f'(&{base_filter}{ldap_filter})'
+        logger.debug('SQLUpdateCompiler._compile_where: Compiled LDAP filter: %s', ldap_filter)
+        return ldap_filter
+
+    def as_sql(self):
+        """
+        Prepare the LDAP-specific data for a modify operation.
+        """
+        self.pre_sql_setup()
+        logger.debug('SQLUpdateCompiler.as_sql: %s', self.query.values)
+
+        # Build the LDAP filter from the WHERE clause
+        ldap_filter = self._compile_where()
+        # Compile the attributes to modify
+        attributes = self._compile_update_attributes()
+        logger.debug('SQLUpdateCompiler.as_sql: %s, %s', ldap_filter, attributes)
+        ldap_modlist = LDAPModList(dn='')
+        for column_name, value in attributes.items():
+            ldap_modlist.add_mod(ldap.MOD_REPLACE, column_name, [value])
+        return ldap_modlist, ()
+
+    def execute_sql(self, result_type=MULTI):
+        cursor = self.connection.cursor()
+        query, params = self.as_sql()
+        print(query, params)
+        return 1
+        # cursor.update(query)
 
 
 class SQLDeleteCompiler(compiler.SQLDeleteCompiler, SQLCompiler):
