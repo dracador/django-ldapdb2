@@ -68,6 +68,8 @@ class QueryResolverTestCase(TestCase):
     u = LDAPUser.objects.get(uid='test'); u.uid = 'test_renamed'; u.save()
     """
 
+    databases = ['ldap']
+
     def assertLDAPSearchIsEqual(self, queryset: QuerySet, expected_ldap_search: LDAPSearch):
         generated_ldap_search = queryset_to_ldap_search(queryset)
         self.assertIsNotNone(generated_ldap_search)

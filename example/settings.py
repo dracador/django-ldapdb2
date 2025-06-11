@@ -89,6 +89,9 @@ DATABASES = {
             ldap.OPT_X_TLS_NEWCTX: 0,
             ldap.OPT_X_TLS_REQUIRE_CERT: ldap.OPT_X_TLS_NEVER,
         },
+        'TEST': {
+            'DEPENDENCIES': [],  # 'ldap' has no dependencies
+        },
     },
 }
 
