@@ -1,7 +1,21 @@
 import ldap
 from django.db import models as django_models
+from django.db.models import QuerySet
+from django.db.models.sql import Query
 
 from .fields import DistinguishedNameField
+
+
+class LDAPQuery(Query):
+    def __init__(self, model, **kwargs):
+        super().__init__(model, **kwargs)
+
+
+class LDAPQuerySet(QuerySet):
+    def __init__(self, model=None, query=None, using=None, hints=None):
+        if query is None:
+            query = LDAPQuery(model)
+        super().__init__(model=model, query=query, using=using, hints=hints)
 
 
 class LDAPModel(django_models.Model):
@@ -10,17 +24,14 @@ class LDAPModel(django_models.Model):
     search_scope: int = ldap.SCOPE_SUBTREE
     object_classes: list[str] = ['top']
 
+    # objects = LDAPQuerySet.as_manager()
+
     dn = DistinguishedNameField(db_column='dn', unique=True, editable=False, hidden=True)
 
     class Meta:
         abstract = True
         managed = False
-
-    @classmethod
-    def _check_required_attrs(cls):
-        for required_attribute in ['base_dn', 'object_classes']:
-            if not getattr(cls, required_attribute, None):
-                raise ValueError(f'{cls.__name__} is missing the required attribute {required_attribute}')
+        ordering = ('dn',)
 
     def __init_subclass__(cls, **kwargs):
         cls._check_required_attrs()
@@ -33,3 +44,9 @@ class LDAPModel(django_models.Model):
             raise ValueError(f'{cls.__name__} has Meta.managed set to True. This is not allowed for LDAP models.')
         else:
             cls.Meta.managed = False
+
+    @classmethod
+    def _check_required_attrs(cls):
+        for required_attribute in ['base_dn', 'object_classes']:
+            if not getattr(cls, required_attribute, None):
+                raise ValueError(f'{cls.__name__} is missing the required attribute {required_attribute}')
