@@ -59,9 +59,6 @@ class SQLCompiler(BaseSQLCompiler):
                 raise NotImplementedError("expressions/annotations not supported yet")
 
             ldap_attr = field.column
-            if ldap_attr == 'dn':
-                continue
-
             attrlist.append(ldap_attr)
             # Remember the alias ('username', 'uid__lower', etc)
             # Maybe needed for annotations?
@@ -70,9 +67,8 @@ class SQLCompiler(BaseSQLCompiler):
         if not attrlist:
             # fall back to all fields except DN.
             for f in self.query.model._meta.fields:
-                if f.column != 'dn':
-                    attrlist.append(f.column)
-                    # self._alias_map[f.column] = f.column  - See above
+                attrlist.append(f.column)
+                # self._alias_map[f.column] = f.column  - See above
 
         return attrlist
 

@@ -14,7 +14,7 @@ class LDAPSearch:
         self,
         base: str,
         filterstr: str = '(objectClass=*)',
-        attrlist: list[str] = None,
+        attrlist: list[str] = None,  # can contain attribute "dn", which will be removed before the ldap search
         scope: ldap.SCOPE_BASE | ldap.SCOPE_ONELEVEL | ldap.SCOPE_SUBTREE = ldap.SCOPE_SUBTREE,
         order_by: list[tuple[str, str]] = None,  # can only be used when using SSSVLV
         control_type: LDAPSearchControlType = LDAPSearchControlType.NO_CONTROL,

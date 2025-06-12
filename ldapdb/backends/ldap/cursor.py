@@ -76,11 +76,12 @@ class DatabaseCursor:
             raise e
 
     def _execute_without_ctrls(self, timeout: int = -1):
+        attrlist_without_dn = [v for v in self.ldap_query.attrlist if v != 'dn']
         return self.connection.search_st(
             base=self.ldap_query.base,
             scope=self.ldap_query.scope,
             filterstr=self.ldap_query.filterstr,
-            attrlist=self.ldap_query.attrlist,
+            attrlist=attrlist_without_dn,
             timeout=timeout,
         )
 
@@ -127,8 +128,7 @@ class DatabaseCursor:
 
     def _set_description(self):
         if self.results:
-            field_names = ['dn'] + self.ldap_query.attrlist
-            self.description = [(attr, None, None, None, None, None, None) for attr in field_names]
+            self.description = [(attr, None, None, None, None, None, None) for attr in self.ldap_query.attrlist]
         else:
             self.description = []
 

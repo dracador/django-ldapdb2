@@ -28,7 +28,7 @@ def get_new_ldap_search(
     return LDAPSearch(
         base=base or 'ou=Users,dc=example,dc=org',
         filterstr=filterstr or LDAPUser.base_filter,
-        attrlist=attrlist or [field.column for field in LDAPUser._meta.get_fields() if field.column != 'dn'],
+        attrlist=attrlist or [field.column for field in LDAPUser._meta.get_fields()],
         scope=scope or ldap.SCOPE_SUBTREE,
         order_by=order_by,
         limit=limit,
