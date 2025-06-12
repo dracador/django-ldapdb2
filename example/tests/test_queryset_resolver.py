@@ -146,9 +146,20 @@ class QueryResolverTestCase(TestCase):
         self.assertLDAPSearchIsEqual(queryset, expected_ldap_search)
         self.assertQuerySetEqual(
             queryset,
-            # TODO: All values are in lists as of now, fix this once we have a proper way to handle that
             [
-                {'username': ['uid=admin,ou=Users,dc=example,dc=org']},
-                {'username': ['uid=user1,ou=Users,dc=example,dc=org']}
+                {'username': 'admin'},
+                {'username': 'user1'}
+            ]
+        )
+
+    def test_ldapuser_values_list(self):
+        queryset = LDAPUser.objects.all().order_by('username').values_list('name')
+        expected_ldap_search = get_new_ldap_search(attrlist=['cn'], order_by=[('uid', 'caseIgnoreOrderingMatch')])
+        self.assertLDAPSearchIsEqual(queryset, expected_ldap_search)
+        self.assertQuerySetEqual(
+            queryset,
+            [
+                ('Admin', ),
+                ('User One', )
             ]
         )
