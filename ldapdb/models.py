@@ -3,7 +3,7 @@ from django.db import models as django_models
 from django.db.models import QuerySet
 from django.db.models.sql import Query
 
-from .fields import DistinguishedNameField
+from .fields import PrimaryDistinguishedNameField
 
 
 class LDAPQuery(Query):
@@ -26,7 +26,7 @@ class LDAPModel(django_models.Model):
 
     # objects = LDAPQuerySet.as_manager()
 
-    dn = DistinguishedNameField(db_column='dn', unique=True, editable=False, hidden=True)
+    dn = PrimaryDistinguishedNameField(db_column='dn', unique=True, editable=False, hidden=True)
 
     class Meta:
         abstract = True

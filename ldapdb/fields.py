@@ -1,6 +1,7 @@
 from typing import TYPE_CHECKING
 
-from django.db.models import fields as django_fields
+from django.core.exceptions import FieldError
+from django.db.models import Lookup, fields as django_fields
 
 from .validators import validate_dn
 
@@ -98,3 +99,17 @@ class CharField(django_fields.CharField, LDAPField):
 
 class DistinguishedNameField(CharField):
     default_validators = [validate_dn]
+
+
+class PrimaryDistinguishedNameField(DistinguishedNameField):
+    _allowed_lookups = {"exact", "iexact"}
+
+    def get_lookup(self, lookup_name: str) -> Lookup:
+        if lookup_name not in self._allowed_lookups:
+            raise FieldError(
+                f'Lookup {lookup_name} is not supported for DN fields. '
+                'Either use an exact lookup filter(dn=...), '
+                'iterate over the list yourself or add another field for something like openLDAPs entryDN attribute'
+            )
+        return super().get_lookup(lookup_name)
+
