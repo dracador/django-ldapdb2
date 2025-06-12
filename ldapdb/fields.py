@@ -8,7 +8,7 @@ if TYPE_CHECKING:
     from .backends.ldap.base import DatabaseWrapper
 
 
-class LdapField(django_fields.Field):
+class LDAPField(django_fields.Field):
     binary_field: bool = False
     multi_valued_field: bool = False
     ordering_rule: str | None = None
@@ -76,7 +76,7 @@ class LdapField(django_fields.Field):
             return [v.encode() for v in values]
 
 
-class CharField(django_fields.CharField, LdapField):
+class CharField(django_fields.CharField, LDAPField):
     def __init__(self, *args, **kwargs):
         defaults = {'max_length': 200}
         defaults.update(kwargs)
