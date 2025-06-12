@@ -28,6 +28,22 @@ class LdapField(django_fields.Field):
         if ordering_rule:
             self.ordering_rule = ordering_rule
 
+    def from_db_value(self, value, _expression, connection):
+        if value is None:
+            return [] if self.multi_valued_field else None
+
+        if not isinstance(value, list | tuple):
+            value = [value]
+
+        if self.binary_field:
+            return value if self.multi_valued_field else value[0]
+
+        decoded_vals = [
+            v.decode(connection.charset) if isinstance(v, bytes | bytearray) else v
+            for v in value
+        ]
+        return decoded_vals if self.multi_valued_field else decoded_vals[0]
+
     def get_db_prep_value(self, value, *_args, prepared=False, **_kwargs):
         """Prepare a value for DB interaction.
 
