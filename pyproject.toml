@@ -9,8 +9,8 @@ dependencies = [
     "python-ldap>=3.3",      # https://github.com/python-ldap/python-ldap/releases
 ]
 
-[tool.uv]
-dev-dependencies = [
+[dependency-groups]
+dev = [
     "django-stubs",
     "faker>=30.8.1",
     "ruff",
