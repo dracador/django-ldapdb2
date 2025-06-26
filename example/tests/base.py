@@ -87,6 +87,18 @@ def transform_ldap_model_dict(instance_data: dict):
 class LDAPTestCase(TestCase):
     databases = ['ldap']
 
+    def assertDiffDict(self, real, expected, msg=None):
+        # Could also use self.assertDictEqual, but this provides a little more readable output
+        mismatches = []
+        for key in real.keys() | expected.keys():
+            v1 = real.get(key, '<MISSING>')
+            v2 = expected.get(key, '<MISSING>')
+            if v1 != v2:
+                mismatches.append(f"- Key '{key}': expected {v2!r}, got {v1!r}")
+        if mismatches:
+            standard_msg = "\n" + "\n".join(mismatches)
+            self.fail(self._formatMessage(msg, standard_msg))
+
     def assertLDAPSearchIsEqual(self, queryset: QuerySet, expected_ldap_search: LDAPSearch):
         generated_ldap_search = queryset_to_ldap_search(queryset)
         self.assertIsNotNone(generated_ldap_search)
@@ -112,7 +124,7 @@ class LDAPTestCase(TestCase):
         else:
             dict_from_b = full_model_to_dict(right_model_instance, fields=fields, exclude=exclude)
 
-        self.assertDictEqual(dict_from_a, dict_from_b)
+        self.assertDiffDict(dict_from_b, dict_from_a)
 
 
 class BaseLDAPTestUser(LDAPModel):
