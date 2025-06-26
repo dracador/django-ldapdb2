@@ -47,14 +47,14 @@ def queryset_to_ldap_search(queryset: QuerySet) -> LDAPSearch:
 
 
 def get_new_ldap_search(
-    base=None,
-    filterstr=None,
-    attrlist=None,
-    scope=None,
-    ordering_rules=None,
-    limit=0,
-    offset=0,
-    ignore_base_filter=False,
+    base: str = 'ou=Users,dc=example,dc=org',
+    filterstr: str | None = None,
+    attrlist: list[str] | None = None,
+    scope: int = None,
+    ordering_rules: list[tuple[str, str]] | None = None,
+    limit: int = 0,
+    offset: int = 0,
+    ignore_base_filter: bool = False,
 ):
     base_filter = LDAPUser.base_filter
     if base_filter and not ignore_base_filter:
@@ -62,7 +62,7 @@ def get_new_ldap_search(
 
     return LDAPSearch(
         attrlist=attrlist or [field.column for field in LDAPUser._meta.get_fields()],
-        base=base or 'ou=Users,dc=example,dc=org',
+        base=base,
         control_type=LDAPSearchControlType.SSSVLV,
         filterstr=filterstr or LDAPUser.base_filter,
         limit=limit,
@@ -96,7 +96,7 @@ class LDAPTestCase(TestCase):
             if v1 != v2:
                 mismatches.append(f"- Key '{key}': expected {v2!r}, got {v1!r}")
         if mismatches:
-            standard_msg = "\n" + "\n".join(mismatches)
+            standard_msg = '\n' + '\n'.join(mismatches)
             self.fail(self._formatMessage(msg, standard_msg))
 
     def assertLDAPSearchIsEqual(self, queryset: QuerySet, expected_ldap_search: LDAPSearch):
