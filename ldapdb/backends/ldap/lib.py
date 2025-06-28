@@ -85,6 +85,41 @@ class LDAPSearch:
         return json.dumps(self.serialize(), indent=4, sort_keys=True)
 
 
+class LDAPModList:
+    def __init__(self, dn: str, modlist: list[tuple[int, str, list[str]]] = None, new_dn: str = None):
+        self.dn = dn
+        self.modlist = modlist or []
+        self.new_dn = new_dn
+
+    def add_mod(self, mod_type: int, attr: str, values: list[str]):
+        self.modlist.append((mod_type, attr, values))
+
+    def serialize(self):
+        return {
+            'dn': self.dn,
+            'modlist': self.modlist,
+            'new_dn': self.new_dn,
+        }
+
+    def as_json(self):
+        return json.dumps(self.serialize(), indent=4, sort_keys=True)
+
+    def validate(self):
+        if not ldap.dn.is_dn(self.dn):
+            raise ValueError(f'Invalid DN {self.dn}.')
+        if self.new_dn and not ldap.dn.is_dn(self.new_dn):
+            raise ValueError(f'Invalid renamed DN {self.new_dn}.')
+
+        if not self.new_dn and not self.modlist:
+            raise ValueError('No modifications provided.')
+
+        for mod_type, attr, values in self.modlist:
+            if mod_type not in [ldap.MOD_ADD, ldap.MOD_DELETE, ldap.MOD_REPLACE]:
+                raise ValueError(f'Invalid mod_type {mod_type} for attribute {attr}.')
+            if not values:
+                raise ValueError(f'No values provided for attribute {attr}.')
+
+
 class LDAPDatabase:
     # Base class for all exceptions as defined in PEP-249
     Error = ldap.LDAPError
