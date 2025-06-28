@@ -11,13 +11,34 @@ from ldapdb.models import LDAPQuery
 from .lib import LDAPDatabase, LDAPSearchControlType
 
 if TYPE_CHECKING:
+    from ldap.controls import RequestControl
     from ldap.ldapobject import ReconnectLDAPObject
 
 logger = logging.getLogger(__name__)
 
 
 class DatabaseCursor:
-    """DatabaseCursor for LDAP according to PEP 249 (DB-API 2.0)"""
+    """
+    DatabaseCursor for LDAP according to PEP 249 (DB-API 2.0)
+
+    This class is used to execute LDAP queries and fetch results.
+    It is designed to work with the LDAPDatabase backend and the LDAPQuery class.
+
+    It supports the following LDAP search types:
+    * Server Side Sorting (+ Virtual List View) (SSSVLV)
+    * Simple Paged Results
+    * No Control (simple search)
+
+    Notes on Virtual List View (VLV) and Simple Paged Results:
+    Theoretically, this cursor could support a more lazy iterator for paginated requests, where it would only fetch
+    the next page and not all results at once. However, this would require keeping track of the context ID and offset,
+    which is not currently implemented. Instead, it fetches all results at once and formats them accordingly.
+    For 99% of use cases, this is sufficient and simplifies the implementation.
+
+    Notes on Ordering:
+    Without Server Side Sorting (SSS), the results will not be ordered by the LDAP server directly.
+    TODO: Implement a way to sort results in Python if SSS is not used.
+    """
 
     def __init__(self, connection):
         self.connection: ReconnectLDAPObject = connection
@@ -97,45 +118,36 @@ class DatabaseCursor:
         raise NotImplementedError()
 
     def _execute_with_sssvlv(self, timeout: int = -1):
-        assert self.search_obj.ordering_rules, 'SSSVLV control requires ordering_rules fields to be set'
+        serverctrls: list[RequestControl] = []
 
         sss_ordering_rules = [f'{attr}:{order_rule}' for attr, order_rule in self.search_obj.ordering_rules]
         logger.debug('DatabaseCursor._execute_with_sssvlv: Ordering rules: %s', sss_ordering_rules)
         sss_ctrl = SSSRequestControl(criticality=True, ordering_rules=sss_ordering_rules)
+        serverctrls.append(sss_ctrl)
 
-        # Not sure if we want to keep track of the context_id and offset/content_count here,
-        # since we could have a more lazy iterator when using this with fetchmany.
-        # Otherwise we'll just always do a new search.
-        # Using a context_id here would take some load off the LDAP server and probably speed things up.
-        vlv_context_id = None
-        vlv_offset = None
-        vlv_content_count = None
+        vlv_ctrl = None
+        use_vlv = self.search_obj.limit or self.search_obj.offset
+        if use_vlv:
+            # Not sure if we want to keep track of the context_id and offset here, since we could have a more lazy
+            # iterator when using this with fetchmany. Otherwise we'll just always do a new search.
+            vlv_context_id = None
 
-        if vlv_offset is None and self.search_obj.offset:
-            vlv_offset = self.search_obj.offset + 1  # VLV uses 1-based indexing
+            vlv_ctrl = VLVRequestControl(
+                criticality=True,
+                before_count=0,
+                after_count=max(0, self.search_obj.limit - 1),
+                offset=self.search_obj.ldap_offset,
+                content_count=0,
+                context_id=vlv_context_id,
+            )
 
-        if self.search_obj.limit:
-            vlv_content_count = self.search_obj.limit
-
-        limit = self.search_obj.limit - 1 if self.search_obj.limit else 10000000
-
-        vlv_ctrl = VLVRequestControl(
-            criticality=True,
-            before_count=0,
-            after_count=limit,  # should be page_size
-            offset=vlv_offset or 1,
-            content_count=vlv_content_count or 0,
-            # greater_than_or_equal=None if vlv_offset and vlv_content_count else 10000,  # just a basic fallback value
-            context_id=vlv_context_id,
-        )
-
-        serverctrls = [sss_ctrl, vlv_ctrl]
+            serverctrls.append(vlv_ctrl)
 
         logger.debug(
             'DatabaseCursor._execute_with_sssvlv:\nLDAPSearch: %s\nSSSConfig: %s\nVLVConfig: %s\n',
             self.search_obj.as_json(),
             json.dumps(sss_ctrl.__dict__, indent=4, sort_keys=True),
-            json.dumps(vlv_ctrl.__dict__, indent=4, sort_keys=True),
+            json.dumps(vlv_ctrl.__dict__, indent=4, sort_keys=True) if vlv_ctrl else None,
         )
 
         msgid = self.connection.search_ext(

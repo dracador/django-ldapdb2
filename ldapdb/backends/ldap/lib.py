@@ -64,6 +64,10 @@ class LDAPSearch:
     def attrlist_without_dn(self):
         return [attr for attr in self.attrlist if attr != 'dn']
 
+    @property
+    def ldap_offset(self):
+        return self.offset + 1
+
     def serialize(self):
         return {
             'attrlist': sorted(self.attrlist),
