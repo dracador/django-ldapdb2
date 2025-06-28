@@ -35,6 +35,7 @@ class DatabaseWrapper(BaseDatabaseWrapper):
     validation_class = BaseDatabaseValidation
 
     operators = {
+        'isnull': '=*',  # will be handled by SQLCompiler._parse_lookup()
         'exact': '=%s',
         'contains': '=*%s*',
         'in': '=*%s*',  # TODO: Make sure CharField__in and ListField__in handle these differently
@@ -49,7 +50,6 @@ class DatabaseWrapper(BaseDatabaseWrapper):
         'icontains': '=*%s*',
         'istartswith': '=%s*',
         'iendswith': '=*%s',
-        # isnull is handled by the Lookup, since it's based on the filter value
     }
 
     def _commit(self):
