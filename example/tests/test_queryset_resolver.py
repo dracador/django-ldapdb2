@@ -1,6 +1,6 @@
 from example.models import LDAPUser
 from .base import LDAPTestCase, get_new_ldap_search
-from .constants import TEST_LDAP_USER_1
+from .constants import TEST_LDAP_AVAILABLE_USERS, TEST_LDAP_USER_1
 
 
 class QueryResolverTestCase(LDAPTestCase):
@@ -112,7 +112,19 @@ class QueryResolverTestCase(LDAPTestCase):
         queryset = LDAPUser.objects.all().values('username')
         expected_ldap_search = get_new_ldap_search(attrlist=['uid'])
         self.assertLDAPSearchIsEqual(queryset, expected_ldap_search)
-        self.assertTrue(queryset)
+        self.assertQuerySetEqual(
+            queryset,
+            [{'username': u.username} for u in TEST_LDAP_AVAILABLE_USERS],
+        )
+
+    def test_ldapuser_values_list(self):
+        queryset = LDAPUser.objects.all().order_by('username').values_list('name', flat=True)
+        expected_ldap_search = get_new_ldap_search(attrlist=['cn'])
+        self.assertLDAPSearchIsEqual(queryset, expected_ldap_search)
+        self.assertQuerySetEqual(
+            queryset,
+            [u.name for u in TEST_LDAP_AVAILABLE_USERS],
+        )
 
     def test_model_field_order(self):
         """
