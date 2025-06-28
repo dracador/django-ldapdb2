@@ -36,6 +36,21 @@ mail: user.one@example.org
 uid: user1
 userPassword: userpassword
 x-user-isActive: TRUE
+departmentNumber: 1
+
+dn: uid=user2,ou=Users,dc=example,dc=org
+objectClass: x-extendedUser
+objectClass: inetOrgPerson
+objectClass: organizationalPerson
+objectClass: person
+objectClass: top
+cn: User Two
+sn: Two
+givenName: User
+mail: user.two@example.org
+uid: user2
+userPassword: user2password
+x-user-isActive: FALSE
 
 dn: cn=Group1,ou=Groups,dc=example,dc=org
 objectClass: groupOfNames

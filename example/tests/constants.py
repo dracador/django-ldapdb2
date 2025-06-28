@@ -21,4 +21,16 @@ TEST_LDAP_USER_1 = LDAPUser(
     department_number=1,
 )
 
-TEST_LDAP_AVAILABLE_USERS = [TEST_LDAP_ADMIN_USER_1, TEST_LDAP_USER_1]
+TEST_LDAP_USER_2 = LDAPUser(
+    dn='uid=user2,ou=Users,dc=example,dc=org',
+    first_name='User',
+    last_name='Two',
+    mail='user.two@example.org',
+    name='User Two',
+    username='user2',
+    is_active=False,
+    department_number=None,
+)
+
+
+TEST_LDAP_AVAILABLE_USERS = [TEST_LDAP_ADMIN_USER_1, TEST_LDAP_USER_1, TEST_LDAP_USER_2]
