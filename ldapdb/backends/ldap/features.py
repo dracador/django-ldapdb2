@@ -84,12 +84,12 @@ class DatabaseFeatures(BaseDatabaseFeatures):
             return conn.read_rootdse_s()
 
     @cached_property
-    def supported_ldap_versions(self) -> list[int]:
+    def supported_ldap_versions(self) -> set[int]:
         """Return a list of supported LDAP protocol versions by the server."""
-        return [int(version.decode()) for version in self.rootdse_data.get('supportedLDAPVersion', [])]
+        return {int(version.decode()) for version in self.rootdse_data.get('supportedLDAPVersion', [])}
 
     @cached_property
-    def supported_controls(self) -> list[str]:
+    def supported_controls(self) -> set[str]:
         """
         Return a list of supported control OIDs
 
@@ -100,10 +100,10 @@ class DatabaseFeatures(BaseDatabaseFeatures):
         - Sync Request Control
         - Password Policy Control
         """
-        return [control.decode() for control in self.rootdse_data.get('supportedControl', [])]
+        return {control.decode() for control in self.rootdse_data.get('supportedControl', [])}
 
     @cached_property
-    def supported_extensions(self) -> list[str]:
+    def supported_extensions(self) -> set[str]:
         """
         Return a list of supported extensions
 
@@ -113,10 +113,10 @@ class DatabaseFeatures(BaseDatabaseFeatures):
         - Who Am I
         - LDAP Password Modify
         """
-        return [extension.decode() for extension in self.rootdse_data.get('supportedExtension', [])]
+        return {extension.decode() for extension in self.rootdse_data.get('supportedExtension', [])}
 
     @cached_property
-    def supported_features(self) -> list[str]:
+    def supported_features(self) -> set[str]:
         """
         Return a list of supported feature OIDs
 
@@ -125,10 +125,10 @@ class DatabaseFeatures(BaseDatabaseFeatures):
         - "All Operational Attributes"
         - True/False filters
         """
-        return [feature.decode() for feature in self.rootdse_data.get('supportedFeatures', [])]
+        return {feature.decode() for feature in self.rootdse_data.get('supportedFeatures', [])}
 
     @cached_property
-    def supported_sasl_mechanisms(self) -> list[str]:
+    def supported_sasl_mechanisms(self) -> set[str]:
         """
         Return a list of supported SASL mechanism OIDs
 
@@ -143,7 +143,7 @@ class DatabaseFeatures(BaseDatabaseFeatures):
         - SCRAM-SHA-384
         - SCRAM-SHA-512
         """
-        return [mech.decode() for mech in self.rootdse_data.get('supportedSASLMechanisms', [])]
+        return {mech.decode() for mech in self.rootdse_data.get('supportedSASLMechanisms', [])}
 
     @cached_property
     def supports_simple_paged_results(self) -> bool:
@@ -167,16 +167,13 @@ class DatabaseFeatures(BaseDatabaseFeatures):
 
     @cached_property
     def can_use_chunked_reads(self) -> bool:
-        """
-        Confirm support for Server Side Sorting and Virtual List View.
-
-        In theory, we could also set this to True if the server supports the Paged Results control.
-        However, it's pretty useless without the SSS & VLV controls since we can't do any ordering and the use case for
-        an unordered paginitation is more of an exception than the rule.
-        """
+        # In theory, we could also set this to True if the server supports the Paged Results control.
+        # However, it's pretty useless without the SSS & VLV controls since we can't do any ordering and the use case
+        # for an unordered paginitation is more of an exception than the rule.
         return self.supports_sssvlv or self.supports_simple_paged_results
 
     @cached_property
     def supports_transactions(self) -> bool:
         """Confirm support for transactions. Transactions have been introduced in OpenLDAP 2.5"""
-        return all(oid in self.supported_extensions for oid in {LDAP_OID_TRANSACTION_START, LDAP_OID_TRANSACTION_END})
+        tx_oids = {LDAP_OID_TRANSACTION_START, LDAP_OID_TRANSACTION_END}
+        return tx_oids.issubset(self.supported_extensions)
