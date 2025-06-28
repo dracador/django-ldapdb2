@@ -10,4 +10,4 @@ slapadd -f /etc/ldap/slapd.conf -l /ldifs/base.ldif
 chown -R openldap:openldap /var/lib/ldap
 
 # Start the LDAP server
-slapd -d 256 -f /etc/ldap/slapd.conf -u openldap -g openldap
+exec slapd -d 256 -f /etc/ldap/slapd.conf -u openldap -g openldap
