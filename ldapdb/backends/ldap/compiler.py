@@ -179,21 +179,24 @@ class SQLCompiler(BaseSQLCompiler):
         return ordering_rules
 
     def _build_ldap_search(self, with_limits):
+        ordering_rules = self._compile_order_by()
         ldap_search = LDAPSearch(
             base=self.query.model.base_dn,
             scope=self.query.model.search_scope,
             attrlist=self._compile_select(),
             filterstr=self._compile_where(),
-            ordering_rules=self._compile_order_by(),  # only used when searching via SSSVLV for now
+            ordering_rules=ordering_rules,  # only used when searching via SSSVLV for now
             offset=self.query.low_mark,
         )
         if with_limits and self.query.high_mark:
             ldap_search.limit = self.query.high_mark - self.query.low_mark
 
-        if self.connection.features.supports_sssvlv:
+        if self.connection.features.supports_sssvlv and ordering_rules:
             ldap_search.control_type = LDAPSearchControlType.SSSVLV
         elif self.connection.features.supports_simple_paged_results:
             ldap_search.control_type = LDAPSearchControlType.SIMPLE_PAGED_RESULTS
+        else:
+            ldap_search.control_type = LDAPSearchControlType.NO_CONTROL
         return ldap_search
 
     def as_sql(self, with_limits=True, with_col_aliases=False) -> tuple[LDAPQuery, tuple]:

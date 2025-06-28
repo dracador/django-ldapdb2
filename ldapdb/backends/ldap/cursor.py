@@ -60,20 +60,8 @@ class DatabaseCursor:
         # Fixed with PyCharm 2025.2 but EAP is unusable right now
         match self.search_obj.control_type:
             case LDAPSearchControlType.SSSVLV:
-                if (self.search_obj.limit or self.search_obj.offset) and not self.search_obj.ordering_rules:
-                    raise AttributeError(
-                        'Cannot use limit/offset without order_by. '
-                        'Either use order_by() in your filter or set a default ordering in your model.'
-                    )
-                elif self.search_obj.ordering_rules:
-                    logger.debug('DatabaseCursor.search: Using SSSVLV control')
-                    return self._execute_with_sssvlv()
-                else:
-                    # TODO: Make LDAPSearchControlType.SIMPLE_PAGED_RESULTS the fallback
-                    #  instead of a simple search_st() call.
-                    #  - Should probably be decided before this function gets called.
-                    logger.debug('DatabaseCursor.search: Using no controls')
-                    return self._execute_without_ctrls()
+                logger.debug('DatabaseCursor.search: Using SSSVLV control')
+                return self._execute_with_sssvlv()
             case LDAPSearchControlType.SIMPLE_PAGED_RESULTS:
                 logger.debug('DatabaseCursor.search: Using Paged Results control')
                 return self._execute_with_simple_paging()
