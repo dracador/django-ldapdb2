@@ -87,14 +87,66 @@ class DatabaseFeatures(BaseDatabaseFeatures):
             return conn.read_rootdse_s()
 
     @cached_property
+    def supported_ldap_versions(self) -> list[int]:
+        """Return a list of supported LDAP protocol versions by the server."""
+        return [int(version.decode()) for version in self.rootdse_data.get('supportedLDAPVersion', [])]
+
+    @cached_property
     def supported_controls(self) -> list[str]:
-        """Return a list of supported controls"""
+        """
+        Return a list of supported control OIDs
+
+        May include controls like:
+        - Simple Paged Results Control
+        - Server Side Sorting (SSS) Control
+        - Virtual List View (VLV) Control
+        - Sync Request Control
+        - Password Policy Control
+        """
         return [control.decode() for control in self.rootdse_data.get('supportedControl', [])]
 
     @cached_property
     def supported_extensions(self) -> list[str]:
-        """Return a list of supported extensions"""
-        return [extension.decode() for extension in self.rootdse_data.get('supportedFeatures', [])]
+        """
+        Return a list of supported extensions
+
+        May include extensions like:
+        - StartTLS
+        - Transaction Start/End
+        - Who Am I
+        - LDAP Password Modify
+        """
+        return [extension.decode() for extension in self.rootdse_data.get('supportedExtension', [])]
+
+    @cached_property
+    def supported_features(self) -> list[str]:
+        """
+        Return a list of supported feature OIDs
+
+        May include features like:
+        - Modify-Increment
+        - "All Operational Attributes"
+        - True/False filters
+        """
+        return [feature.decode() for feature in self.rootdse_data.get('supportedFeatures', [])]
+
+    @cached_property
+    def supported_sasl_mechanisms(self) -> list[str]:
+        """
+        Return a list of supported SASL mechanism OIDs
+
+        May include mechanisms like:
+        - CRAM-MD5
+        - DIGEST-MD5
+        - LOGIN
+        - NTLM
+        - PLAIN
+        - SCRAM-SHA-1
+        - SCRAM-SHA-256
+        - SCRAM-SHA-384
+        - SCRAM-SHA-512
+        """
+        return [mech.decode() for mech in self.rootdse_data.get('supportedSASLMechanisms', [])]
 
     @cached_property
     def supports_simple_paged_results(self) -> bool:
@@ -102,9 +154,19 @@ class DatabaseFeatures(BaseDatabaseFeatures):
         return SimplePagedResultsControl.controlType in self.supported_controls
 
     @cached_property
+    def supports_sss(self) -> bool:
+        """Confirm support for Server Side Sorting."""
+        return SSSRequestControl.controlType in self.supported_controls
+
+    @cached_property
+    def supports_vlv(self) -> bool:
+        """Confirm support for Virtual List View."""
+        return VLVRequestControl.controlType in self.supported_controls
+
+    @cached_property
     def supports_sssvlv(self) -> bool:
         """Confirm support for Server Side Sorting and Virtual List View."""
-        return all(control.controlType in self.supported_controls for control in [SSSRequestControl, VLVRequestControl])
+        return self.supports_sss and self.supports_vlv
 
     @cached_property
     def can_use_chunked_reads(self) -> bool:
