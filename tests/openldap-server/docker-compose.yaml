@@ -7,6 +7,8 @@ services:
       - '636:636'
     volumes:
       - './ldifs:/ldifs'
+      - type: tmpfs
+        target: /var/lib/ldap
     ulimits:
       nofile:
         soft: 1024
