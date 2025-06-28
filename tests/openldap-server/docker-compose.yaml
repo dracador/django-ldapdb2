@@ -1,4 +1,15 @@
+version: '3.9'
+
 services:
+  generate-ldif:
+    build:
+      context: .
+    volumes:
+      - .:/app
+      - ./ldifs:/ldifs
+    working_dir: /app
+    entrypoint: sh -c "python manage.py export_ldap_ldif -o /ldifs/generated_data.ldif"
+
   openldap:
     build: .
     container_name: django-ldapdb2-openldap
@@ -7,8 +18,12 @@ services:
       - '636:636'
     volumes:
       - './ldifs:/ldifs'
+      - type: tmpfs
+        target: /var/lib/ldap
     ulimits:
       nofile:
         soft: 1024
         hard: 1024
     command: /init-ldap.sh
+    depends_on:
+      - generate-ldif
