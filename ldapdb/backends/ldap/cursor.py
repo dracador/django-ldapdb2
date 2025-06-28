@@ -35,18 +35,32 @@ class DatabaseCursor:
         return self.query.ldap_search
 
     def search(self):
+        # noinspection PyUnreachableCode
+        # Fixed with PyCharm 2025.2 but EAP is unusable right now
         match self.search_obj.control_type:
             case LDAPSearchControlType.SSSVLV:
-                logger.debug('DatabaseCursor.search: Using SSSVLV control')
-                return self._execute_with_sssvlv()
+                if (self.search_obj.limit or self.search_obj.offset) and not self.search_obj.ordering_rules:
+                    raise AttributeError(
+                        'Cannot use limit/offset without order_by. '
+                        'Either use order_by() in your filter or set a default ordering in your model.'
+                    )
+                elif self.search_obj.ordering_rules:
+                    logger.debug('DatabaseCursor.search: Using SSSVLV control')
+                    return self._execute_with_sssvlv()
+                else:
+                    # TODO: Make LDAPSearchControlType.SIMPLE_PAGED_RESULTS the fallback
+                    #  instead of a simple search_st() call.
+                    #  - Should probably be decided before this function gets called.
+                    logger.debug('DatabaseCursor.search: Using no controls')
+                    return self._execute_without_ctrls()
             case LDAPSearchControlType.SIMPLE_PAGED_RESULTS:
                 logger.debug('DatabaseCursor.search: Using Paged Results control')
                 return self._execute_with_simple_paging()
             case LDAPSearchControlType.NO_CONTROL:
-                logger.debug('DatabaseCursor.search: Using no control - Returning empty list for now!')
-                return self._execute_without_control()
+                logger.debug('DatabaseCursor.search: Using no controls')
+                return self._execute_without_ctrls()
             case _:
-                raise NotImplementedError(f'Control type {self.search_obj.control_type} not yet implemented')
+                raise NotImplementedError(f'Unknown control type {self.search_obj.control_type}')
 
     def execute(self, query: LDAPQuery, *_args, **_params):
         logger.debug('DatabaseCursor.execute: query: %s (%s), params: %s', query, type(query), _params)
@@ -69,8 +83,15 @@ class DatabaseCursor:
         except ldap.LDAPError as e:
             raise e
 
-    def _execute_without_control(self):
-        raise NotImplementedError()
+    def _execute_without_ctrls(self, timeout: int = -1):
+        logger.debug('DatabaseCursor._execute_without_ctrls')
+        return self.connection.search_st(
+            base=self.search_obj.base,
+            scope=self.search_obj.scope,
+            filterstr=self.search_obj.filterstr,
+            attrlist=self.search_obj.attrlist_without_dn,
+            timeout=timeout,
+        )
 
     def _execute_with_simple_paging(self, timeout: int = -1):
         raise NotImplementedError()
