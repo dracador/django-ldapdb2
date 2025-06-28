@@ -132,7 +132,12 @@ class DatabaseCursor:
 
     def set_description(self):
         if self.results:
-            self.description = [(attr, None, None, None, None, None, None) for attr in self.search_obj.attrlist]
+            if self.search_obj.attrlist:
+                self.description = [(attr, None, None, None, None, None, None) for attr in self.search_obj.attrlist]
+            else:
+                # Always prepend DN so the row is not empty, even when the
+                # compiler did not define any attributes (exists(), count(), etc).
+                self.description = [('dn', None, None, None, None, None, None)]
         else:
             self.description = []
 

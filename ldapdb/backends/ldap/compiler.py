@@ -1,12 +1,12 @@
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 from django.db import NotSupportedError
 from django.db.models import Lookup
-from django.db.models.expressions import Col
+from django.db.models.expressions import Col, Expression
 from django.db.models.fields import Field
 from django.db.models.sql import compiler
-from django.db.models.sql.compiler import SQLCompiler as BaseSQLCompiler
+from django.db.models.sql.compiler import PositionRef, SQLCompiler as BaseSQLCompiler
 from django.db.models.sql.constants import GET_ITERATOR_CHUNK_SIZE, MULTI
 from django.db.models.sql.where import WhereNode
 
@@ -19,6 +19,14 @@ if TYPE_CHECKING:
     from .base import DatabaseWrapper
 
 logger = logging.getLogger(__name__)
+
+
+class SelectInfo(NamedTuple):
+    """A 3-tuples consisting of (expression, (sql, params), alias)"""
+
+    column: Expression
+    sql_data: tuple[str, list[Any]]
+    alias: str
 
 
 class SQLCompiler(BaseSQLCompiler):
@@ -48,27 +56,16 @@ class SQLCompiler(BaseSQLCompiler):
         Otherwise the instanced LDAPModel objects might have the values of their fields swapped.
 
         TODO: Implement annotations & Related fields
-
-        :return: An ordered list of LDAP attribute names to fetch.
+        :return: An ordered list of LDAP attribute names to fetch (including DN, which won't be passed to search call).
         """
-        selected_fields = []
+        attrlist = []
 
-        if self.query.values_select:
-            selected_fields = self.query.values_select
-        else:
-            for select_info in self.query.select:
-                if hasattr(select_info, 'target'):
-                    field = select_info.target
-                    field_name = field.attname
-                    selected_fields.append(field_name)
-
-        if selected_fields:
-            selected_columns = [self.field_mapping[field_name] for field_name in selected_fields]
-        else:
-            selected_columns = list(self.field_mapping.values())
-
-        logger.debug('Selected LDAP attributes for query: %s', selected_columns)
-        return selected_columns
+        for sel in self.select:
+            sel = SelectInfo(*sel)
+            if isinstance(sel.column, Col):
+                ldap_attr = sel.column.target.column
+                attrlist.append(ldap_attr)
+        return attrlist
 
     def _parse_lookup(self, lookup: Lookup) -> str:
         """Convert a Lookup to an LDAP filter string using the defined operators."""
@@ -158,10 +155,11 @@ class SQLCompiler(BaseSQLCompiler):
         logger.debug('Compiled LDAP filter: %s', ldap_filter)
         return ldap_filter
 
-    def _compile_order_by(self):
+    def _compile_order_by(self) -> list[tuple[str, str]]:
         ordering_rules = []
         for order_expr, _order_data in self.get_order_by():
-            if not isinstance(order_expr.expression, Col):
+            order_expr: Col | PositionRef
+            if not isinstance(order_expr.expression, Col | PositionRef):
                 raise NotImplementedError(f'Unsupported order expression type: {type(order_expr.expression)}')
 
             attrname = order_expr.field.column
