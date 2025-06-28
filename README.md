@@ -19,3 +19,4 @@ support for non-standard use cases.
 - [ ] checkdb command to validate the model to the LDAP server schema
 - [ ] inspectdb command to generate models from the LDAP server schema
 - [ ] Query explanations as LDIF
+- [ ] Be compatible with django-debug-toolbar
