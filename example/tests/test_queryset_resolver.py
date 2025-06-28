@@ -130,6 +130,10 @@ class QueryResolverTestCase(LDAPTestCase):
         obj = LDAPUser.objects.all().order_by('username')[1]
         self.assertLDAPModelObjectsAreEqual(TEST_LDAP_USER_1, obj)
 
+    def test_ldapuser_index_access_oob(self):
+        with self.assertRaises(IndexError):
+            _ = LDAPUser.objects.all().order_by('username')[9999999]
+
     def test_model_field_order(self):
         """
         This test is supposed to be run a lot of times to ensure the order of fields is correct

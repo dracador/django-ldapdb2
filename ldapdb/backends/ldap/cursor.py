@@ -150,17 +150,24 @@ class DatabaseCursor:
             json.dumps(vlv_ctrl.__dict__, indent=4, sort_keys=True) if vlv_ctrl else None,
         )
 
-        msgid = self.connection.search_ext(
-            base=self.search_obj.base,
-            scope=self.search_obj.scope,
-            filterstr=self.search_obj.filterstr,
-            attrlist=self.search_obj.attrlist_without_dn,
-            serverctrls=serverctrls,
-            timeout=timeout,
-        )
+        try:
+            msgid = self.connection.search_ext(
+                base=self.search_obj.base,
+                scope=self.search_obj.scope,
+                filterstr=self.search_obj.filterstr,
+                attrlist=self.search_obj.attrlist_without_dn,
+                serverctrls=serverctrls,
+                timeout=timeout,
+            )
 
-        rtype, rdata, rmsgid, serverctrls = self.connection.result3(msgid)
-        logger.debug('DatabaseCursor._execute_with_sssvlv - Result: length: %s, results: %s', len(rdata), rdata)
+            rtype, rdata, rmsgid, serverctrls = self.connection.result3(msgid)
+            logger.debug('DatabaseCursor._execute_with_sssvlv - Result: length: %s, results: %s', len(rdata), rdata)
+        except ldap.LDAPError as exc:
+            # VLV error 76 -> Index out of range
+            if exc.args and isinstance(exc.args[0], dict) and exc.args[0].get('result') == ldap.VLV_ERROR.errnum:
+                # To not break the behavior django expects, we return an empty list and let django raise the IndexError
+                return []
+            raise
         return rdata
 
     def set_description(self):
