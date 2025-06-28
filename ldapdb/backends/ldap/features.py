@@ -6,13 +6,10 @@ from ldap.controls import SimplePagedResultsControl
 from ldap.controls.sss import SSSRequestControl
 from ldap.controls.vlv import VLVRequestControl
 
+from ldapdb.backends.ldap.controls import LDAP_OID_TRANSACTION_END, LDAP_OID_TRANSACTION_START
+
 if TYPE_CHECKING:
     from ldap.ldapobject import ReconnectLDAPObject
-
-# TODO: Since neither python-ldap nor ldap3 support Request/ResponseControls for transactions,
-#  we'll need to implement our own transaction support. Put these in controls.py
-LDAP_OID_TRANSACTION_START = '1.3.6.1.1.21.1'
-LDAP_OID_TRANSACTION_END = '1.3.6.1.1.21.3'
 
 
 class DatabaseFeatures(BaseDatabaseFeatures):
@@ -182,4 +179,4 @@ class DatabaseFeatures(BaseDatabaseFeatures):
     @cached_property
     def supports_transactions(self) -> bool:
         """Confirm support for transactions. Transactions have been introduced in OpenLDAP 2.5"""
-        return LDAP_OID_TRANSACTION_START in self.supported_extensions
+        return all(oid in self.supported_extensions for oid in {LDAP_OID_TRANSACTION_START, LDAP_OID_TRANSACTION_END})
