@@ -63,6 +63,7 @@ class LDAPGroup(LDAPModel):
     object_classes = ['groupOfNames']
 
     name = CharField(db_column='cn', primary_key=True)
+    org_unit = CharField(db_column='ou')
     members = MemberField(db_column='member')
 
     # Only for demonstration purposes. In praxis you'd probably not use multiple description attributes.
