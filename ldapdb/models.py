@@ -53,6 +53,13 @@ class LDAPModel(django_models.Model):
         base_manager_name = 'objects'
 
     @classmethod
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+
+        cls._check_non_abstract_inheritance()
+        cls._check_required_attrs()
+
+    @classmethod
     def _check_required_attrs(cls):
         if not cls._meta.abstract:
             for required_attribute in ['base_dn', 'object_classes', 'search_scope']:
@@ -74,10 +81,3 @@ class LDAPModel(django_models.Model):
                     f'Cannot subclass non-abstract model "{base.__name__}" in "{cls.__name__}". '
                     'Only abstract models can be subclassed in this LDAP backend.'
                 )
-
-    @classmethod
-    def __init_subclass__(cls, **kwargs):
-        super().__init_subclass__(**kwargs)
-
-        cls._check_non_abstract_inheritance()
-        cls._check_required_attrs()
