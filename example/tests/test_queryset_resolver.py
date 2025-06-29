@@ -1,6 +1,6 @@
 from example.models import LDAPGroup, LDAPUser
 from .base import LDAPTestCase, get_new_ldap_search
-from .constants import TEST_LDAP_AVAILABLE_USERS, TEST_LDAP_GROUP_1, TEST_LDAP_USER_1
+from .constants import TEST_LDAP_ADMIN_USER_1, TEST_LDAP_AVAILABLE_USERS, TEST_LDAP_GROUP_1, TEST_LDAP_USER_1
 
 
 class QueryResolverTestCase(LDAPTestCase):
@@ -133,6 +133,14 @@ class QueryResolverTestCase(LDAPTestCase):
             queryset,
             [u.name for u in TEST_LDAP_AVAILABLE_USERS],
         )
+
+    def test_ldapuser_order_first(self):
+        obj = LDAPUser.objects.all().order_by('username').first()
+        self.assertLDAPModelObjectsAreEqual(TEST_LDAP_ADMIN_USER_1, obj)
+
+    def test_ldapuser_order_last(self):
+        obj = LDAPUser.objects.all().order_by('username').last()
+        self.assertLDAPModelObjectsAreEqual(TEST_LDAP_AVAILABLE_USERS[-1], obj)
 
     def test_ldapuser_index_access(self):
         obj = LDAPUser.objects.all().order_by('username')[1]
