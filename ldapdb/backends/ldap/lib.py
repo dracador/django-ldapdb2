@@ -87,6 +87,16 @@ class LDAPSearch:
 
 class LDAPDatabase:
     # Base class for all exceptions as defined in PEP-249
+
+    @staticmethod
+    def Binary(value):
+        """
+        Return *value* unchanged.
+
+        LDAP does not have a specific binary type, so this is just a placeholder
+        """
+        return value
+
     Error = ldap.LDAPError
 
     class DatabaseError(Error):
@@ -123,6 +133,7 @@ class LDAPDatabase:
         ldap.ALREADY_EXISTS,
         ldap.CONSTRAINT_VIOLATION,
         ldap.TYPE_OR_VALUE_EXISTS,
+        ldap.OBJECT_CLASS_VIOLATION,
     ):
         """Exceptions related to database Integrity."""
 
@@ -132,7 +143,6 @@ class LDAPDatabase:
         ldap.INVALID_SYNTAX,
         ldap.NOT_ALLOWED_ON_NONLEAF,
         ldap.NOT_ALLOWED_ON_RDN,
-        ldap.OBJECT_CLASS_VIOLATION,
         ldap.UNDEFINED_TYPE,
     ):
         """Exceptions related to invalid data"""
