@@ -74,6 +74,10 @@ class QueryResolverTestCase(LDAPTestCase):
     def test_ldapuser_exists(self):
         self.assertTrue(LDAPUser.objects.all().exists())
 
+    def test_exists_after_filter(self):
+        self.assertTrue(LDAPUser.objects.filter(username=TEST_LDAP_USER_1.username).exists())
+        self.assertFalse(LDAPUser.objects.filter(username='doesnotexist').exists())
+
     def test_ldapuser_filter_exclude(self):
         queryset = LDAPUser.objects.filter(name='User').exclude(username='admin', name='OtherUser')
         expected_ldap_search = get_new_ldap_search(filterstr='(&(cn=User)(!(&(cn=OtherUser)(uid=admin))))')
