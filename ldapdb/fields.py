@@ -41,7 +41,12 @@ class LDAPField(django_fields.Field):
 
     def from_db_value(self, value, expression, connection):  # noqa: ARG002
         if value is None:
-            return [] if self.multi_valued_field else value
+            if self.null:
+                return value
+            elif self.multi_valued_field:
+                return []
+            elif self.binary_field:
+                return b'' if self.binary_field else ''
 
         if not isinstance(value, list | tuple):
             value = [value]
@@ -160,11 +165,16 @@ class BooleanField(django_fields.BooleanField, LDAPField):
         return "TRUE" if value else "FALSE"
 
 
-class EmailField(django_fields.EmailField, LDAPField):
+class EmailField(django_fields.EmailField, CharField):
     pass
 
 
 class IntegerField(django_fields.IntegerField, LDAPField):
+    def __init__(self, *args, **kwargs):
+        defaults = {'null': True}
+        defaults.update(kwargs)
+        super().__init__(*args, **defaults)
+
     def from_db_value(self, value, expression, connection):
         value = super().from_db_value(value, expression, connection)
         if value is None:
