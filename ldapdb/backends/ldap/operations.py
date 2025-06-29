@@ -1,8 +1,34 @@
+from typing import TYPE_CHECKING
+
 from django.db.backends.base.operations import BaseDatabaseOperations
+
+if TYPE_CHECKING:
+    from .base import DatabaseWrapper
 
 
 class DatabaseOperations(BaseDatabaseOperations):
+    connection: 'DatabaseWrapper'
     compiler_module = 'ldapdb.backends.ldap.compiler'
+
+    def get_db_converters(self, expression):
+        converters = super().get_db_converters(expression)
+        field = expression.output_field
+
+        def _unwrap_and_decode(value, _, __):
+            if value is None:
+                return value
+
+            if not getattr(field, "multi_valued_field", False) and isinstance(value, list | tuple):
+                value = value[0]
+
+            if isinstance(value, bytes | bytearray):
+                value = value.decode(self.connection.charset)
+
+            return value
+
+        if not getattr(field, "binary_field", False):
+            converters.append(_unwrap_and_decode)
+        return converters
 
     def quote_name(self, name):
         return name
