@@ -1,6 +1,6 @@
-from example.models import LDAPUser
+from example.models import LDAPGroup, LDAPUser
 from .base import LDAPTestCase, get_new_ldap_search
-from .constants import TEST_LDAP_AVAILABLE_USERS, TEST_LDAP_USER_1
+from .constants import TEST_LDAP_AVAILABLE_USERS, TEST_LDAP_GROUP_1, TEST_LDAP_USER_1
 
 
 class QueryResolverTestCase(LDAPTestCase):
@@ -48,8 +48,16 @@ class QueryResolverTestCase(LDAPTestCase):
     """
 
     @staticmethod
+    def _get_group_1_object():
+        return LDAPGroup.objects.get(name=TEST_LDAP_GROUP_1.name)
+
+    @staticmethod
     def _get_user_1_object():
         return LDAPUser.objects.get(username=TEST_LDAP_USER_1.username)
+
+    def test_ldapgroup_get(self):
+        obj = self._get_group_1_object()
+        self.assertLDAPModelObjectsAreEqual(TEST_LDAP_GROUP_1, obj)
 
     def test_ldapuser_all(self):
         queryset = LDAPUser.objects.all()
