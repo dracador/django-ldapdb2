@@ -102,7 +102,7 @@ class LDAPDatabase:
     class DatabaseError(Error):
         """Database-side errors."""
 
-    class OperationalError(
+    OperationalError = (
         DatabaseError,
         ldap.ADMINLIMIT_EXCEEDED,
         ldap.AUTH_METHOD_NOT_SUPPORTED,
@@ -124,30 +124,27 @@ class LDAPDatabase:
         ldap.UNAVAILABLE,
         ldap.UNAVAILABLE_CRITICAL_EXTENSION,
         ldap.UNWILLING_TO_PERFORM,
-    ):
-        """Exceptions related to the database operations, out of the programmer control."""
+    )
 
-    class IntegrityError(
+    IntegrityError = (
         DatabaseError,
         ldap.AFFECTS_MULTIPLE_DSAS,
         ldap.ALREADY_EXISTS,
         ldap.CONSTRAINT_VIOLATION,
         ldap.TYPE_OR_VALUE_EXISTS,
         ldap.OBJECT_CLASS_VIOLATION,
-    ):
-        """Exceptions related to database Integrity."""
+    )
 
-    class DataError(
+    DataError = (
         DatabaseError,
         ldap.INVALID_DN_SYNTAX,
         ldap.INVALID_SYNTAX,
         ldap.NOT_ALLOWED_ON_NONLEAF,
         ldap.NOT_ALLOWED_ON_RDN,
         ldap.UNDEFINED_TYPE,
-    ):
-        """Exceptions related to invalid data"""
+    )
 
-    class InterfaceError(
+    InterfaceError = (
         ldap.CLIENT_LOOP,
         ldap.DECODING_ERROR,
         ldap.ENCODING_ERROR,
@@ -158,17 +155,15 @@ class LDAPDatabase:
         ldap.REFERRAL_LIMIT_EXCEEDED,
         ldap.USER_CANCELLED,
         Error,
-    ):
-        """Exceptions related to the pyldap interface."""
+    )
 
-    class InternalError(
+    InternalError = (
         DatabaseError,
         ldap.ALIAS_DEREF_PROBLEM,
         ldap.ALIAS_PROBLEM,
-    ):
-        """Exceptions encountered within the database."""
+    )
 
-    class ProgrammingError(
+    ProgrammingError = (
         DatabaseError,
         ldap.CONTROL_NOT_FOUND,
         ldap.FILTER_ERROR,
@@ -177,11 +172,9 @@ class LDAPDatabase:
         ldap.NO_SUCH_ATTRIBUTE,
         ldap.NO_SUCH_OBJECT,
         ldap.PARAM_ERROR,
-    ):
-        """Invalid data send by the programmer."""
+    )
 
-    class NotSupportedError(
+    NotSupportedError = (
         DatabaseError,
         ldap.NOT_SUPPORTED,
-    ):
-        """Exception for unsupported actions."""
+    )
