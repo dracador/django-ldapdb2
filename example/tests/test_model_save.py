@@ -2,7 +2,7 @@ from django.db import IntegrityError
 
 from example.models import LDAPUser
 from example.tests.base import LDAPTestCase
-from example.tests.constants import TEST_LDAP_USER_1
+from example.tests.constants import TEST_LDAP_USER_1, THUMBNAIL_PHOTO_BYTES
 
 
 class QueryResolverTestCase(LDAPTestCase):
@@ -19,7 +19,16 @@ class QueryResolverTestCase(LDAPTestCase):
             _ = LDAPUser.objects.create(username='user98', name='User 98', mail='user98@example.com')
 
     def test_create_user(self):
-        user = LDAPUser.objects.create(username='user99', name='User 99', mail='user99@example.com', sn='NinetyNine')
+        user = LDAPUser.objects.create(
+            department_number=99,
+            description='Test user 99',
+            is_active=True,
+            last_name='NinetyNine',
+            mail='user99@example.com',
+            name='User 99',
+            username='user99',
+            thumbnail_photo=THUMBNAIL_PHOTO_BYTES,
+        )
         self.assertIsNotNone(user, 'User should be created successfully.')
         user = LDAPUser.objects.get(username='user99')
         self.assertEqual(user.username, 'user99', "User's username should match the created value.")

@@ -1,6 +1,15 @@
+import base64
+
 from example.models import LDAPGroup, LDAPUser
 
 # TODO: Maybe use generator.generate_ldap_user() and even use it to create the initial LDIF for server?
+
+THUMBNAIL_PHOTO_B64 = (
+    'iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs'
+    '+9AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAAsSURBVChTY/'
+    'hPJGBAF8AF4Ao7GERRJND5pJtICJBnNUgShtEB6VYTAkQrBADdTn3geExV1QAAAABJRU5ErkJggg=='
+)
+THUMBNAIL_PHOTO_BYTES = base64.b64decode(THUMBNAIL_PHOTO_B64)
 
 
 TEST_LDAP_ADMIN_USER_1 = LDAPUser(
