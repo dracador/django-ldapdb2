@@ -17,18 +17,18 @@ class BaseLDAPUser(LDAPModel):
     """
 
     base_dn = 'ou=Users,dc=example,dc=org'
-    object_classes = ['inetOrgPerson', 'organizationalPerson']
+    object_classes = ['inetOrgPerson', 'organizationalPerson', 'x-extendedUser']
 
     username = CharField(db_column='uid', primary_key=True)
     name = CharField(db_column='cn')
-    first_name = CharField(db_column='givenName')
+    first_name = CharField(db_column='givenName', null=True)
     last_name = CharField(db_column='sn')
-    mail = EmailField(db_column='mail')
-    non_existing_attribute = CharField(db_column='nonExistingAttribute')
+    mail = EmailField(db_column='mail', null=True)
+    non_existing_attribute = CharField(db_column='nonExistingAttribute', null=True)
     is_active = BooleanField(db_column='x-user-isActive')
-    department_number = IntegerField(db_column='departmentNumber')
-    description = TextField(db_column='description')
-    thumbnail_photo = BinaryField(db_column='jpegPhoto')
+    department_number = IntegerField(db_column='departmentNumber', null=True)
+    description = TextField(db_column='description', null=True)
+    thumbnail_photo = BinaryField(db_column='jpegPhoto', null=True)
 
     def __str__(self):
         return self.username

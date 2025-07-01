@@ -1,4 +1,5 @@
-from typing import TYPE_CHECKING
+import enum
+from typing import TYPE_CHECKING, Any
 
 from django.core.exceptions import FieldError
 from django.db.models import Lookup, fields as django_fields
@@ -9,10 +10,16 @@ if TYPE_CHECKING:
     from .backends.ldap.base import DatabaseWrapper
 
 
+class UpdateStrategy(str, enum.Enum):
+    ADD_DELETE = 'ADD_DELETE'  # multi (MOD_ADD + MOD_DELETE)
+    REPLACE = 'REPLACE'  # single (MOD_REPLACE)
+
+
 class LDAPField(django_fields.Field):
     binary_field: bool = False
     multi_valued_field: bool = False
     ordering_rule: str | None = None
+    update_strategy: UpdateStrategy = UpdateStrategy.REPLACE
 
     def __init__(
         self,
@@ -20,6 +27,7 @@ class LDAPField(django_fields.Field):
         ordering_rule: str | None = None,
         hidden: bool = False,
         multi_valued_field: bool | None = None,
+        update_strategy: UpdateStrategy | None = None,
         **kwargs,
     ):
         """
@@ -39,6 +47,9 @@ class LDAPField(django_fields.Field):
         if ordering_rule is not None:
             self.ordering_rule = ordering_rule
 
+        if update_strategy is not None:
+            self.update_strategy = update_strategy
+
     def from_db_value(self, value, expression, connection):  # noqa: ARG002
         if value is None:
             if self.null:
@@ -54,10 +65,7 @@ class LDAPField(django_fields.Field):
         if self.binary_field:
             return value if self.multi_valued_field else value[0]
 
-        decoded_vals = [
-            v.decode(connection.charset) if isinstance(v, bytes | bytearray) else v
-            for v in value
-        ]
+        decoded_vals = [v.decode(connection.charset) if isinstance(v, bytes | bytearray) else v for v in value]
         return decoded_vals if self.multi_valued_field else decoded_vals[0]
 
     def run_validators(self, value):
@@ -70,7 +78,7 @@ class LDAPField(django_fields.Field):
         else:
             super().run_validators(value)
 
-    def get_db_prep_value(self, value, *_args, prepared=False, **_kwargs):
+    def get_db_prep_value(self, value: Any, connection: 'DatabaseWrapper', prepared: bool = False):  # noqa: ARG002
         """Prepare a value for DB interaction.
 
         Returns:
@@ -99,7 +107,7 @@ class LDAPField(django_fields.Field):
             # Already raw values; don't encode it twice.
             return values
         else:
-            return [v.encode() for v in values]
+            return [str(v).encode() for v in values]
 
 
 class CharField(django_fields.CharField, LDAPField):
@@ -124,7 +132,7 @@ class DistinguishedNameField(CharField):
 
 
 class PrimaryDistinguishedNameField(DistinguishedNameField):
-    _allowed_lookups = {"exact", "iexact"}
+    _allowed_lookups = {'exact', 'iexact'}
 
     def get_lookup(self, lookup_name: str) -> Lookup:
         if lookup_name not in self._allowed_lookups:
@@ -139,12 +147,6 @@ class PrimaryDistinguishedNameField(DistinguishedNameField):
 class BinaryField(django_fields.BinaryField, LDAPField):
     binary_field = True
 
-    def from_db_value(self, value, expression, connection):
-        value = super().from_db_value(value, expression, connection)
-        if value is None:
-            return None if self.null else b''
-        return value
-
 
 class BooleanField(django_fields.BooleanField, LDAPField):
     """
@@ -155,14 +157,14 @@ class BooleanField(django_fields.BooleanField, LDAPField):
 
     def from_db_value(self, value, expression, connection):
         raw = super().from_db_value(value, expression, connection)
-        if raw in (None, ""):
+        if raw in (None, ''):
             return None
-        return str(raw).upper() == "TRUE"
+        return str(raw).upper() == 'TRUE'
 
     def get_prep_value(self, value):
         if value is None:
             return None
-        return "TRUE" if value else "FALSE"
+        return 'TRUE' if value else 'FALSE'
 
 
 class EmailField(django_fields.EmailField, CharField):
