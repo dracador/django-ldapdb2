@@ -32,3 +32,17 @@ class QueryResolverTestCase(LDAPTestCase):
         self.assertIsNotNone(user, 'User should be created successfully.')
         user = LDAPUser.objects.get(username='user99')
         self.assertEqual(user.username, 'user99', "User's username should match the created value.")
+
+    def test_update_user_non_primary_field(self):
+        new_mail = 'useronehundred@example.com'
+        user = LDAPUser.objects.create(
+            is_active=False,
+            last_name='One Hundred',
+            mail='user100@example.com',
+            name='User One Hundred',
+            username='user100',
+        )
+        user.mail = new_mail
+        user.save()
+        user.refresh_from_db()
+        self.assertEqual(user.mail, new_mail)

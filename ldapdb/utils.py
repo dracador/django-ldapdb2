@@ -49,3 +49,32 @@ def escape_ldap_filter_value(value: str):
     value = value.replace(')', '\\29')
     value = value.replace('\x00', '\\00')
     return value
+
+
+def create_ldap_entry(dn: str, attributes: dict):
+    """
+    Create an LDAP entry with the given DN and attributes.
+    :param dn: Distinguished Name of the entry.
+    :param attributes: Dictionary of attributes to set on the entry.
+    :return: None
+    """
+    connection = initialize_connection()
+    try:
+        attrs = [
+            ('objectClass', [b'inetOrgPerson']),
+            ('uid', [b'jdoe']),
+            ('cn', [b'John Doe']),
+            ('sn', [b'Doe']),
+            ('mail', [b'jdoe@example.org']),
+        ]
+        result = connection.add_s(
+            dn,
+            attrs,
+        )
+        print(f'LDAP entry created: {dn}')
+    except Exception as e:
+        print(f'Failed to create LDAP entry {dn}: {e}')
+        raise
+    finally:
+        connection.unbind_s()
+    return result
