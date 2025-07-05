@@ -41,15 +41,27 @@ class SQLCompiler(BaseSQLCompiler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        if not isinstance(self.query, LDAPQuery):
-            raise LDAPQueryTypeError(self.query)
-
         model = self.query.model
         if not issubclass(model, LDAPModel):
             raise LDAPModelTypeError(model)
 
         self.field_mapping = {field.attname: field.column for field in model._meta.fields}
         self.reverse_field_mapping = {field.column: field for field in model._meta.fields}
+
+    def _pk_value_from_where(self):
+        # only used in Update and Delete compilers
+        where = self.query.where
+        model = self.query.model
+        pk_field = model._meta.pk
+
+        if where.connector != 'AND' or len(where.children) != 1:
+            raise NotSupportedError('Only simple primary-key updates are supported.')
+
+        cond = where.children[0]
+        if not (isinstance(cond, Exact) and cond.lhs.target is pk_field):
+            raise NotSupportedError('UPDATE/DELETE must be filtered by the primary key.')
+
+        return cond.rhs
 
     def _compile_select(self) -> list[str]:
         """
@@ -225,21 +237,7 @@ class SQLCompiler(BaseSQLCompiler):
         return super().execute_sql(result_type, chunked_fetch, chunk_size)
 
 
-class SQLUpdateCompiler(compiler.SQLUpdateCompiler):
-    def _pk_value_from_where(self):
-        where = self.query.where
-        model = self.query.model
-        pk_field = model._meta.pk
-
-        if where.connector != 'AND' or len(where.children) != 1:
-            raise NotSupportedError('Only simple primary-key updates are supported.')
-
-        cond = where.children[0]
-        if not (isinstance(cond, Exact) and cond.lhs.target is pk_field):
-            raise NotSupportedError('UPDATE must be filtered by the primary key.')
-
-        return cond.rhs
-
+class SQLUpdateCompiler(compiler.SQLUpdateCompiler, SQLCompiler):
     def execute_sql(self, returning_fields=None):  # noqa: ARG002 - don't need returning_fields, we just force another search
         model = cast('LDAPModel', self.query.model)
         db = cast('DatabaseWrapper', self.connection)
@@ -301,7 +299,7 @@ class SQLUpdateCompiler(compiler.SQLUpdateCompiler):
         return 1
 
 
-class SQLInsertCompiler(compiler.SQLInsertCompiler):
+class SQLInsertCompiler(compiler.SQLInsertCompiler, SQLCompiler):
     """
     Supports `Model.objects.create(...)` and `obj.save(force_insert=True)`.
     """
@@ -348,7 +346,23 @@ class SQLInsertCompiler(compiler.SQLInsertCompiler):
 
 
 class SQLDeleteCompiler(compiler.SQLDeleteCompiler, SQLCompiler):
-    pass
+    def execute_sql(self, *_args, **_kwargs):
+        model = cast('LDAPModel', self.query.model)
+        db = self.connection
+        ldap_conn = db.connection
+
+        pk_val = self._pk_value_from_where()
+        dn = f'{model._meta.pk.column}={pk_val},{model.base_dn}'
+
+        logger.debug('LDAP delete request for %s', dn)
+
+        with self.connection.wrap_database_errors:
+            try:
+                ldap_conn.delete_s(dn)
+            except ldap.NO_SUCH_OBJECT:
+                return 0
+
+        return 1
 
 
 class SQLAggregateCompiler(compiler.SQLAggregateCompiler, SQLCompiler):
