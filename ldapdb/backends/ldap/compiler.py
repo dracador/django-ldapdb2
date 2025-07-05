@@ -6,8 +6,9 @@ from django.db import NotSupportedError
 from django.db.models import Lookup
 from django.db.models.expressions import Col, Expression
 from django.db.models.fields import Field
+from django.db.models.lookups import Exact
 from django.db.models.sql import compiler
-from django.db.models.sql.compiler import PositionRef, SQLCompiler as BaseSQLCompiler, SQLCompiler as DjangoSQLCompiler
+from django.db.models.sql.compiler import PositionRef, SQLCompiler as BaseSQLCompiler
 from django.db.models.sql.constants import GET_ITERATOR_CHUNK_SIZE, MULTI
 from django.db.models.sql.where import WhereNode
 
@@ -15,7 +16,7 @@ from ldapdb.exceptions import LDAPModelTypeError, LDAPQueryTypeError
 from ldapdb.fields import UpdateStrategy
 from ldapdb.models import LDAPModel, LDAPQuery
 from ldapdb.utils import escape_ldap_filter_value
-from .ldif_helpers import AddRequest, ModifyRequest, diff_multi
+from .ldif_helpers import AddRequest, ModifyRequest
 from .lib import LDAPSearch, LDAPSearchControlType
 
 if TYPE_CHECKING:
@@ -224,78 +225,83 @@ class SQLCompiler(BaseSQLCompiler):
         return super().execute_sql(result_type, chunked_fetch, chunk_size)
 
 
-class _LDAPWriteCompilerMixin(DjangoSQLCompiler):
-    # TODO: Prooobably don't need this. And if we do, document
-    connection: 'DatabaseWrapper'
+class SQLUpdateCompiler(compiler.SQLUpdateCompiler):
+    def _pk_value_from_where(self):
+        where = self.query.where
+        model = self.query.model
+        pk_field = model._meta.pk
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+        if where.connector != 'AND' or len(where.children) != 1:
+            raise NotSupportedError('Only simple primary-key updates are supported.')
 
+        cond = where.children[0]
+        if not (isinstance(cond, Exact) and cond.lhs.target is pk_field):
+            raise NotSupportedError('UPDATE must be filtered by the primary key.')
 
-class SQLUpdateCompiler(compiler.SQLUpdateCompiler, SQLCompiler):
-    def _extract_single_dn(self) -> str:
-        pk_field = self.query.model._meta.pk
+        return cond.rhs
 
-        possible_lookup = self.query.where.children[0] if self.query.where else None
-        if not isinstance(possible_lookup, Lookup) or possible_lookup.lookup_name not in ('exact', 'iexact'):
-            raise NotSupportedError('LDAP backend only supports update by primary key')
+    def execute_sql(self, returning_fields=None):  # noqa: ARG002 - don't need returning_fields, we just force another search
+        model = cast('LDAPModel', self.query.model)
+        db = cast('DatabaseWrapper', self.connection)
+        ldap_conn = db.connection
+        charset = db.charset
 
-        pk_value = possible_lookup.rhs
-        return f'{pk_field.column}={pk_value},{self.query.model.base_dn}'
+        pk_val = self._pk_value_from_where()
+        dn = f'{model._meta.pk.column}={pk_val},{model.base_dn}'
 
-    def _current_values(self, dn: str, attrs: list[str]) -> dict[str, list[bytes]]:
-        if not attrs:
-            return {}
+        with db.wrap_database_errors:
+            try:
+                _, entry = ldap_conn.search_s(dn, ldap.SCOPE_BASE)[0]
+            except ldap.NO_SUCH_OBJECT as e:
+                raise NotSupportedError(f'Entry {dn!r} vanished while updating') from e
 
-        _rt, data, *_ = self.connection.connection.search_s(dn, ldap.SCOPE_BASE, attrlist=attrs)
-        if not data:
-            raise ldap.NO_SUCH_OBJECT({'dn': dn})
-        _dn, current = data[0]
-        return current
+        mod = ModifyRequest()
+        mod.charset = charset
 
-    def execute_sql(self, *_):
-        dn = self._extract_single_dn()
-        conn = self.connection.connection
-        charset = self.connection.charset
+        for field, _model, raw_val in self.query.values:
+            attr = field.column
+            old_vals: list[bytes] = entry.get(attr, [])
 
-        needs_old = any(
-            getattr(f, 'update_strategy', UpdateStrategy.REPLACE) == UpdateStrategy.ADD_DELETE
-            for f, _, _ in self.query.values
-        )
-        old_vals = self._current_values(
-            dn,
-            [f.column for f, _, _ in self.query.values] if needs_old else [],
-        )
+            if raw_val is None:
+                new_vals = []
+            else:
+                prepped = field.get_db_prep_save(raw_val, db)
+                new_vals = list(prepped) if isinstance(prepped, list | tuple) else [prepped]
 
-        mods: ModifyRequest = ModifyRequest()
-        mods.charset = charset
+            if not field.binary_field:
+                old_vals = [v.decode(charset) if isinstance(v, bytes | bytearray) else v for v in old_vals]
+                new_vals = [v.decode(charset) if isinstance(v, bytes | bytearray) else v for v in new_vals]
 
-        for field, _placeholder, new_raw in self.query.values:
-            new_prep = field.get_db_prep_save(new_raw, self.connection)
-            if not isinstance(new_prep, list | tuple):
-                new_prep = [new_prep]
-            new_bytes = [v.encode(charset) if isinstance(v, str) else v for v in new_prep]
-
-            strategy = getattr(field, 'update_strategy', UpdateStrategy.REPLACE)
-
-            if strategy == UpdateStrategy.REPLACE or not field.multi_valued_field:
-                mods.replace(field.column, new_bytes)
+            if old_vals == new_vals:
                 continue
 
-            # ADD_DELETE
-            current = old_vals.get(field.column, [])
-            adds, deletes = diff_multi(current, new_bytes)
-            if deletes:
-                mods.append((ldap.MOD_DELETE, field.column, deletes))
-            if adds:
-                mods.append((ldap.MOD_ADD, field.column, adds))
+            if not new_vals:
+                mod.delete(attr)
+            elif not old_vals:
+                mod.add(attr, new_vals)
+            else:
+                if (
+                    getattr(field, 'update_strategy', UpdateStrategy.REPLACE) == UpdateStrategy.ADD_DELETE
+                    and field.multi_valued_field
+                ):
+                    mod.delete(attr)
+                    mod.add(attr, new_vals)
+                else:
+                    mod.replace(attr, new_vals)
 
-        if mods:
-            conn.modify_s(dn, mods)
-        return []
+        if not mod:
+            logger.debug('No changes after diff for %s — skipping modify_s().', dn)
+            return 0
+
+        logger.debug('LDAP modify request for %s\n%s', dn, mod)
+
+        with db.wrap_database_errors:
+            ldap_conn.modify_s(dn, mod.as_modlist())
+
+        return 1
 
 
-class SQLInsertCompiler(_LDAPWriteCompilerMixin, compiler.SQLInsertCompiler):
+class SQLInsertCompiler(compiler.SQLInsertCompiler):
     """
     Supports `Model.objects.create(...)` and `obj.save(force_insert=True)`.
     """
@@ -305,8 +311,8 @@ class SQLInsertCompiler(_LDAPWriteCompilerMixin, compiler.SQLInsertCompiler):
             raise NotSupportedError('bulk_insert() not implemented yet')
 
         obj = self.query.objs[0]
-        model = cast(LDAPModel, self.query.model)
-        db = self.connection
+        model = cast('LDAPModel', self.query.model)
+        db = cast('DatabaseWrapper', self.connection)
         ldap_conn = db.connection
 
         # build DN
