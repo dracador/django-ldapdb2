@@ -55,6 +55,10 @@ class QueryResolverTestCase(LDAPTestCase):
     def _get_user_1_object():
         return LDAPUser.objects.get(username=TEST_LDAP_USER_1.username)
 
+    @staticmethod
+    def get_testuser_objects():
+        return LDAPUser.objects.filter(username__in=[u.username for u in TEST_LDAP_AVAILABLE_USERS])
+
     def test_ldapgroup_get(self):
         obj = self._get_group_1_object()
         self.assertLDAPModelObjectsAreEqual(TEST_LDAP_GROUP_1, obj)
@@ -131,8 +135,8 @@ class QueryResolverTestCase(LDAPTestCase):
         self.assertLDAPSearchIsEqual(queryset, expected_ldap_search)
 
     def test_ldapuser_values(self):
-        queryset = LDAPUser.objects.all().values('username')
-        expected_ldap_search = get_new_ldap_search(attrlist=['uid'])
+        queryset = self.get_testuser_objects().values('username')
+        expected_ldap_search = get_new_ldap_search(attrlist=['uid'], filterstr='(|(uid=admin)(uid=user1)(uid=user2))')
         self.assertLDAPSearchIsEqual(queryset, expected_ldap_search)
         self.assertQuerySetEqual(
             queryset,
@@ -140,8 +144,8 @@ class QueryResolverTestCase(LDAPTestCase):
         )
 
     def test_ldapuser_values_list(self):
-        queryset = LDAPUser.objects.all().order_by('username').values_list('name', flat=True)
-        expected_ldap_search = get_new_ldap_search(attrlist=['cn'])
+        queryset = self.get_testuser_objects().order_by('username').values_list('name', flat=True)
+        expected_ldap_search = get_new_ldap_search(attrlist=['cn'], filterstr='(|(uid=admin)(uid=user1)(uid=user2))')
         self.assertLDAPSearchIsEqual(queryset, expected_ldap_search)
         self.assertQuerySetEqual(
             queryset,
@@ -149,15 +153,16 @@ class QueryResolverTestCase(LDAPTestCase):
         )
 
     def test_ldapuser_order_first(self):
-        obj = LDAPUser.objects.all().order_by('username').first()
+        obj = self.get_testuser_objects().order_by('username').first()
         self.assertLDAPModelObjectsAreEqual(TEST_LDAP_ADMIN_USER_1, obj)
 
     def test_ldapuser_order_last(self):
-        obj = LDAPUser.objects.all().order_by('username').last()
+        obj = self.get_testuser_objects().order_by('username').last()
         self.assertLDAPModelObjectsAreEqual(TEST_LDAP_AVAILABLE_USERS[-1], obj)
 
     def test_ldapuser_index_access(self):
-        obj = LDAPUser.objects.all().order_by('username')[1]
+        testuser_usernames = [u.username for u in TEST_LDAP_AVAILABLE_USERS]
+        obj = LDAPUser.objects.filter(username__in=testuser_usernames).order_by('username')[1]
         self.assertLDAPModelObjectsAreEqual(TEST_LDAP_USER_1, obj)
 
     def test_ldapuser_index_access_oob(self):
