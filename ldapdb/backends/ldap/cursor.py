@@ -3,6 +3,7 @@ import logging
 from typing import TYPE_CHECKING
 
 import ldap
+from django.db.models import Count
 from ldap.controls.sss import SSSRequestControl
 from ldap.controls.vlv import VLVRequestControl
 
@@ -83,14 +84,28 @@ class DatabaseCursor:
         self.rowcount = -1
         self.lastrowid = None
 
-        try:
-            self.results = self.search()
-            self.set_description()
-            self.format_results()
-            self.rowcount = len(self.results)
+        self.results = self.search()
+
+        if (
+            not self.query.group_by
+            and len(self.query.annotations) == 1
+            and all(isinstance(v, Count) for v in self.query.annotations.values())
+        ):
+            # TODO: Use NumSubordinates/ldapentrycount?#
+            #  https://ldapwiki.com/wiki/Wiki.jsp?page=NumSubordinates
+            # This is a special case for count queries like LDAPUser.objects.count(),
+            # where we only return the count of results.
+            alias = next(iter(self.query.annotations))
+            self.results = [(len(self.results),)]
+            self.description = [(alias, None, None, None, None, None, None)]
+            self.rowcount = 1
             self._result_iter = iter(self.results)
-        except ldap.LDAPError as e:
-            raise e
+            return
+
+        self.set_description()
+        self.format_results()
+        self.rowcount = len(self.results)
+        self._result_iter = iter(self.results)
 
     def _execute_without_ctrls(self, timeout: int = -1):
         logger.debug('DatabaseCursor._execute_without_ctrls')

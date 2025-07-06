@@ -27,7 +27,7 @@ class QueryResolverTestCase(LDAPTestCase):
     X LDAPUser.objects.all().values('uid', 'cn')
 
     --- Aggregation ---
-    LDAPUser.objects.all().count()
+    X LDAPUser.objects.all().count()
     LDAPUser.objects.aggregate(Count('uid'))
 
     --- Annotation ---
@@ -70,6 +70,16 @@ class QueryResolverTestCase(LDAPTestCase):
 
     def test_ldapuser_exists(self):
         self.assertTrue(LDAPUser.objects.all().exists())
+
+    def test_ldapuser_count(self):
+        # Use assertGreaterEqual because other tests might add more users
+        self.assertGreaterEqual(LDAPUser.objects.all().count(), len(TEST_LDAP_AVAILABLE_USERS))
+
+    def test_ldapuser_filter_count(self):
+        self.assertEqual(LDAPUser.objects.filter(username__contains='admin').count(), 1)
+
+    def test_ldapuser_len_all_equals_count(self):
+        self.assertEqual(LDAPUser.objects.all().count(), len(LDAPUser.objects.all()))
 
     def test_exists_after_filter(self):
         self.assertTrue(LDAPUser.objects.filter(username=TEST_LDAP_USER_1.username).exists())
