@@ -3,7 +3,7 @@ from .base import LDAPTestCase, get_new_ldap_search
 from .constants import TEST_LDAP_ADMIN_USER_1, TEST_LDAP_AVAILABLE_USERS, TEST_LDAP_GROUP_1, TEST_LDAP_USER_1
 
 
-class QueryResolverTestCase(LDAPTestCase):
+class SQLCompilerTestCase(LDAPTestCase):
     """
     TODO: Implement the following test cases:
     --- Basic ---

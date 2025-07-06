@@ -4,7 +4,7 @@ from example.models import LDAPUser
 from example.tests.base import LDAPTestCase
 
 
-class LDAPDeleteCompilerTests(LDAPTestCase):
+class SQLDeleteCompilerTestCase(LDAPTestCase):
     def test_delete_single_instance(self):
         deletion_username = 'deletion_user'
         LDAPUser.objects.create(

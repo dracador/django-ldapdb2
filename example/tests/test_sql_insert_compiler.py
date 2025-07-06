@@ -5,7 +5,7 @@ from example.tests.base import LDAPTestCase
 from example.tests.constants import TEST_LDAP_USER_1, THUMBNAIL_PHOTO_BYTES
 
 
-class QueryResolverTestCase(LDAPTestCase):
+class SQLInsertCompilerTestCase(LDAPTestCase):
     @staticmethod
     def _get_user_1_object():
         return LDAPUser.objects.get(username=TEST_LDAP_USER_1.username)
