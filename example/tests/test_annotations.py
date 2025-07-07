@@ -9,7 +9,7 @@ from .constants import TEST_LDAP_USER_1
 class AnnotationTestCase(LDAPTestCase):
     def test_annotation_constant(self):
         qs = LDAPUser.objects.annotate(one=Value(1))
-        assert qs.first().one == 1
+        self.assertEqual(qs.first().one, 1)
 
     def test_annotation_expression(self):
         qs = LDAPUser.objects.annotate(lower=Lower("username")).order_by("lower")
