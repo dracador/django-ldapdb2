@@ -6,13 +6,13 @@ from django.db import NotSupportedError
 from django.db.models import Lookup
 from django.db.models.expressions import Col, Expression
 from django.db.models.fields import Field
-from django.db.models.lookups import Exact
+from django.db.models.lookups import Exact, In
 from django.db.models.sql import compiler
 from django.db.models.sql.compiler import PositionRef, SQLCompiler as BaseSQLCompiler
 from django.db.models.sql.constants import GET_ITERATOR_CHUNK_SIZE, MULTI
 from django.db.models.sql.where import WhereNode
 
-from ldapdb.exceptions import LDAPModelTypeError, LDAPQueryTypeError
+from ldapdb.exceptions import LDAPModelTypeError
 from ldapdb.fields import UpdateStrategy
 from ldapdb.models import LDAPModel, LDAPQuery
 from ldapdb.utils import escape_ldap_filter_value
@@ -58,10 +58,14 @@ class SQLCompiler(BaseSQLCompiler):
             raise NotSupportedError('Only simple primary-key updates are supported.')
 
         cond = where.children[0]
-        if not (isinstance(cond, Exact) and cond.lhs.target is pk_field):
-            raise NotSupportedError('UPDATE/DELETE must be filtered by the primary key.')
+        if isinstance(cond, Exact) and cond.lhs.target is pk_field:
+            return cond.rhs
 
-        return cond.rhs
+        if isinstance(cond, In) and cond.lhs.target is pk_field and len(cond.rhs) == 1:
+            # obj.delete() resolves to Model.objects.filter(pk__in=[pk])._raw_delete(), so it used the "In" lookup
+            return cond.rhs[0]
+
+        raise NotSupportedError('UPDATE/DELETE must be filtered by the primary key.')
 
     def _compile_select(self) -> list[str]:
         """
