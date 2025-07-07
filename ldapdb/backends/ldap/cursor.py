@@ -3,7 +3,7 @@ import logging
 from typing import TYPE_CHECKING
 
 import ldap
-from django.db.models import Count
+from django.db.models import Count, Value
 from ldap.controls.sss import SSSRequestControl
 from ldap.controls.vlv import VLVRequestControl
 
@@ -174,18 +174,25 @@ class DatabaseCursor:
         return rdata
 
     def set_description(self):
+        field_names = []
         if self.results:
             if self.search_obj.attrlist:
-                self.description = [(attr, None, None, None, None, None, None) for attr in self.search_obj.attrlist]
+                field_names.extend(self.search_obj.attrlist)
             else:
                 # Always prepend DN so the row is not empty, even when the
                 # compiler did not define any attributes (exists(), count(), etc).
-                self.description = [('dn', None, None, None, None, None, None)]
-        else:
-            self.description = []
+                field_names.append('dn')
+
+        if self.query.annotation_aliases:
+            field_names.extend(self.query.annotation_aliases)
+
+        self.description = [(attr, None, None, None, None, None, None) for attr in field_names]
 
     def format_results(self):
+        annotations = dict(self.query.annotations.items()) if self.query.annotations else {}
+        aliases = self.query.annotation_aliases
         column_names = [col[0] for col in self.description]
+
 
         results = []
         for dn, attributes in self.results:
@@ -193,9 +200,15 @@ class DatabaseCursor:
             for attr_name in column_names:
                 if attr_name == 'dn':
                     row_data['dn'] = [dn]
-                else:
+                elif attr_name in attributes:
                     row_data[attr_name] = attributes.get(attr_name, None)
+                elif attr_name in aliases:
+                    expr = annotations[attr_name]
+                    row_data[attr_name] = expr.value if isinstance(expr, Value) else None
+                else:
+                    row_data[attr_name] = None
 
+            print(row_data)
             # sort rows in the correct order that is defined by the column names in description<
             row = tuple(row_data[col] for col in column_names)
             results.append(row)

@@ -4,13 +4,14 @@ from typing import TYPE_CHECKING, Any, NamedTuple, cast
 import ldap
 from django.db import NotSupportedError
 from django.db.models import Lookup
-from django.db.models.expressions import Col, Expression
+from django.db.models.expressions import Col, Expression, Value
 from django.db.models.fields import Field
 from django.db.models.lookups import Exact, In
 from django.db.models.sql import compiler
 from django.db.models.sql.compiler import PositionRef, SQLCompiler as BaseSQLCompiler
 from django.db.models.sql.constants import GET_ITERATOR_CHUNK_SIZE, MULTI
 from django.db.models.sql.where import WhereNode
+from example.iterables import LDAPExpressionIterable
 
 from ldapdb.exceptions import LDAPModelTypeError
 from ldapdb.fields import UpdateStrategy
@@ -41,6 +42,7 @@ class SQLCompiler(BaseSQLCompiler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+        self.query._iterable_class = LDAPExpressionIterable
         model = self.query.model
         if not issubclass(model, LDAPModel):
             raise LDAPModelTypeError(model)
@@ -79,12 +81,15 @@ class SQLCompiler(BaseSQLCompiler):
         :return: An ordered list of LDAP attribute names to fetch (including DN, which won't be passed to search call).
         """
         attrlist = []
+        self.annotation_aliases = []
 
         for sel in self.select:
             sel = SelectInfo(*sel)
             if isinstance(sel.column, Col):
                 ldap_attr = sel.column.target.column
                 attrlist.append(ldap_attr)
+            elif isinstance(sel.column, Value):
+                self.annotation_aliases.append(sel.alias)
         return attrlist
 
     def _parse_lookup(self, lookup: Lookup) -> str:
@@ -233,6 +238,7 @@ class SQLCompiler(BaseSQLCompiler):
 
         self.query.ldap_search = self._build_ldap_search(with_limits)
 
+        self.query.annotation_aliases = getattr(self, 'annotation_aliases', [])
         # Normally returns "sql, params" but we want the whole query instance passed to the cursors execute() method
         return self.query, ()
 
