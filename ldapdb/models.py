@@ -4,6 +4,7 @@ import ldap
 from django.db import models as django_models
 from django.db.models import QuerySet
 from django.db.models.sql import Query
+from example.iterables import LDAPExpressionIterable
 
 from .exceptions import LDAPModelTypeError
 from .fields import DistinguishedNameField
@@ -21,6 +22,7 @@ class LDAPQuery(Query):
         if not issubclass(model, LDAPModel):
             raise LDAPModelTypeError(model)
 
+        self.annotation_aliases: list = []
         self.ldap_search: LDAPSearch | None = None
 
 
@@ -29,6 +31,7 @@ class LDAPQuerySet(QuerySet):
         if query is None:
             query = LDAPQuery(model)
         super().__init__(model=model, query=query, using=using, hints=hints)
+        self._iterable_class = LDAPExpressionIterable
 
     def raw(self, *_args, **_kwargs):
         # Maybe allow raw to take an LDIF input or an LDAPSearch instance?

@@ -11,6 +11,7 @@ from django.db.models.sql import compiler
 from django.db.models.sql.compiler import PositionRef, SQLCompiler as BaseSQLCompiler
 from django.db.models.sql.constants import GET_ITERATOR_CHUNK_SIZE, MULTI
 from django.db.models.sql.where import WhereNode
+from example.iterables import LDAPExpressionIterable
 
 from ldapdb.exceptions import LDAPModelTypeError
 from ldapdb.fields import UpdateStrategy
@@ -41,10 +42,12 @@ class SQLCompiler(BaseSQLCompiler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+        self.query._iterable_class = LDAPExpressionIterable
         model = self.query.model
         if not issubclass(model, LDAPModel):
             raise LDAPModelTypeError(model)
 
+        self.annotation_aliases = []
         self.field_mapping = {field.attname: field.column for field in model._meta.fields}
         self.reverse_field_mapping = {field.column: field for field in model._meta.fields}
 
@@ -85,6 +88,8 @@ class SQLCompiler(BaseSQLCompiler):
             if isinstance(sel.column, Col):
                 ldap_attr = sel.column.target.column
                 attrlist.append(ldap_attr)
+            else:
+                self.annotation_aliases.append(sel.alias)
         return attrlist
 
     def _parse_lookup(self, lookup: Lookup) -> str:
@@ -231,6 +236,7 @@ class SQLCompiler(BaseSQLCompiler):
         if (self.query.low_mark or self.query.high_mark) and not self.connection.features.supports_sssvlv:
             raise NotSupportedError('Slicing is not supported without VLV control.')
 
+        self.query.annotation_aliases = self.annotation_aliases
         self.query.ldap_search = self._build_ldap_search(with_limits)
 
         # Normally returns "sql, params" but we want the whole query instance passed to the cursors execute() method

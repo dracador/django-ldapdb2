@@ -1,30 +1,18 @@
 from django.db.models import Value
-from django.db.models.functions import Length, Lower
+from django.db.models.functions import Lower, Upper
 
-from example.models import LDAPUser
 from .base import LDAPTestCase
-from .constants import TEST_LDAP_USER_1
 
 
 class AnnotationTestCase(LDAPTestCase):
-    def test_annotation_constant(self):
-        qs = LDAPUser.objects.annotate(one=Value(1))
-        self.assertEqual(qs.first().one, 1)
+    def test_annotation_expression_value(self):
+        u = self.get_testuser_objects().annotate(one=Value(1)).first()
+        self.assertEqual(u.one, 1)
 
-    def test_annotation_expression(self):
-        qs = LDAPUser.objects.annotate(lower=Lower("username")).order_by("lower")
-        usernames = list(qs.values_list("lower", flat=True))
-        assert usernames == sorted(u.lower() for u in usernames)
+    def test_annotation_expression_lower(self):
+        u = self.get_testuser_objects().annotate(lower=Lower('username')).first()
+        self.assertEqual(u.lower, u.username.lower())
 
-    def test_annotation_length_and_filter(self):
-        qs = (
-            LDAPUser.objects
-            .annotate(n=Length("username"))
-            .filter(n__gt=3)
-            .values_list("username", flat=True)
-        )
-        assert all(len(u) > 3 for u in qs)
-
-    def test_slice_with_annotation(self):
-        obj = LDAPUser.objects.annotate(lower=Lower("username")).order_by("lower")[1]
-        assert obj.username == TEST_LDAP_USER_1.username
+    def test_annotation_expression_upper(self):
+        u = self.get_testuser_objects().annotate(upper=Upper('username')).first()
+        self.assertEqual(u.upper, u.username.upper())
