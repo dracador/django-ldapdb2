@@ -260,8 +260,10 @@ class SQLUpdateCompiler(compiler.SQLUpdateCompiler, SQLCompiler):
         with db.wrap_database_errors:
             try:
                 _, entry = ldap_conn.search_s(dn, ldap.SCOPE_BASE)[0]
-            except ldap.NO_SUCH_OBJECT as e:
-                raise NotSupportedError(f'Entry {dn!r} vanished while updating') from e
+            except ldap.NO_SUCH_OBJECT:
+                # This might happen if an object is created via .save().
+                # Returning 0 here forces Django to use the SQLInsertCompiler.
+                return 0
 
         mod = ModifyRequest()
         mod.charset = charset
@@ -350,6 +352,7 @@ class SQLInsertCompiler(compiler.SQLInsertCompiler, SQLCompiler):
 
         with self.connection.wrap_database_errors:
             # make sure any exceptions bubble up as proper Django errors
+            print(dn, add.as_modlist())
             ldap_conn.add_s(dn, add.as_modlist())
 
         return []  # Django does not care about the return value of execute_sql() for INSERTs
