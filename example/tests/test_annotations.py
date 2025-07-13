@@ -34,6 +34,17 @@ class AnnotationTestCase(LDAPTestCase):
         u = self.get_annotation_qs().annotate(upper=Upper('username')).first()
         self.assertEqual(u.upper, u.username.upper())
 
+    def test_trims(self):
+        qs = self.get_annotation_qs().annotate(
+            trim=Trim('name'),
+            ltrim=LTrim('name'),
+            rtrim=RTrim('name'),
+        )
+        obj = qs.first()
+        self.assertEqual(obj.trim, 'Annotation  Test')
+        self.assertEqual(obj.ltrim, 'Annotation  Test ')
+        self.assertEqual(obj.rtrim, ' Annotation  Test')
+
     @classmethod
     def tearDownClass(cls):
         cls.user.delete()
