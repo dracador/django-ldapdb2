@@ -1,32 +1,33 @@
 from django.db import NotSupportedError
 
 from example.models import LDAPUser
-from example.tests.base import LDAPTestCase
+from .base import LDAPTestCase
+from .generator import create_random_ldap_user
 
 
 class SQLDeleteCompilerTestCase(LDAPTestCase):
-    def test_delete_single_instance(self):
-        deletion_username = 'deletion_user'
-        LDAPUser.objects.create(
-            username=deletion_username,
-            name='Deletion User',
-            first_name='Deletion',
-            last_name='User',
-            mail='deletion_user@example.com',
-        )
-        keep_deletion_username = 'keep_deletion_user'
-        LDAPUser.objects.create(
-            username=keep_deletion_username,
-            name='Keep Deletion User',
-            first_name='Keep',
-            last_name='User',
-            mail='keep_deletion_user@example.com',
-        )
+    user_to_delete: LDAPUser = None
+    user_to_delete_2: LDAPUser = None
+    user_to_keep: LDAPUser = None
 
-        num, details = LDAPUser.objects.filter(username=deletion_username).delete()
+    @classmethod
+    def setUpTestData(cls):
+        if not cls.user_to_delete:
+            cls.user_to_delete = create_random_ldap_user()
+            # cls.user_to_delete.save()
+        if not cls.user_to_delete_2:
+            cls.user_to_delete_2 = create_random_ldap_user()
+        #    cls.user_to_delete_2.save()
+        if not cls.user_to_keep:
+            cls.user_to_keep = create_random_ldap_user()
+        #    cls.user_to_keep.save()
+        # TODO: cls.user_to_delete.save() and others completely breaks the *whole* test suite somehow
+
+    def test_delete_single_instance(self):
+        num, details = LDAPUser.objects.filter(username=self.user_to_delete.username).delete()
         self.assertEqual(num, 1)
-        self.assertFalse(LDAPUser.objects.filter(username=deletion_username).exists())
-        self.assertTrue(LDAPUser.objects.filter(username=keep_deletion_username).exists())
+        self.assertFalse(LDAPUser.objects.filter(username=self.user_to_delete.username).exists())
+        self.assertTrue(LDAPUser.objects.filter(username=self.user_to_keep.username).exists())
 
     def test_delete_missing_returns_zero(self):
         num, _ = LDAPUser.objects.filter(username='does_not_exist').delete()
@@ -41,15 +42,6 @@ class SQLDeleteCompilerTestCase(LDAPTestCase):
     def test_instance_delete(self):
         # TODO: Fix test
         #  NotSupportedError('UPDATE/DELETE must be filtered by the primary key.')
-        username = 'deletion_user_2'
-        LDAPUser.objects.create(
-            username=username,
-            name='Deletion User 2',
-            first_name='Deletion',
-            last_name='User 2',
-            mail='deletion_user2@example.com',
-        )
-
-        obj = LDAPUser.objects.get(username=username)
+        obj = LDAPUser.objects.get(username=self.user_to_delete_2.username)
         obj.delete()
-        self.assertFalse(LDAPUser.objects.filter(username=username).exists())
+        self.assertFalse(LDAPUser.objects.filter(username=self.user_to_delete_2.username).exists())
