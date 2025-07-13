@@ -11,10 +11,10 @@ from django.db.models.sql import compiler
 from django.db.models.sql.compiler import PositionRef, SQLCompiler as BaseSQLCompiler
 from django.db.models.sql.constants import GET_ITERATOR_CHUNK_SIZE, MULTI
 from django.db.models.sql.where import WhereNode
-from example.iterables import LDAPExpressionIterable
 
 from ldapdb.exceptions import LDAPModelTypeError
 from ldapdb.fields import UpdateStrategy
+from ldapdb.iterables import LDAPExpressionIterable
 from ldapdb.models import LDAPModel, LDAPQuery
 from ldapdb.utils import escape_ldap_filter_value
 from .ldif_helpers import AddRequest, ModifyRequest

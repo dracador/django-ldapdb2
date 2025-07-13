@@ -1,5 +1,6 @@
 from django.db import NotSupportedError
 from django.db.models.query import ModelIterable
+
 from ldapdb.backends.ldap.expressions import eval_expr
 
 

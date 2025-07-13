@@ -4,10 +4,10 @@ import ldap
 from django.db import models as django_models
 from django.db.models import QuerySet
 from django.db.models.sql import Query
-from example.iterables import LDAPExpressionIterable
 
 from .exceptions import LDAPModelTypeError
 from .fields import DistinguishedNameField
+from .iterables import LDAPExpressionIterable
 
 if TYPE_CHECKING:
     from .backends.ldap import LDAPSearch
