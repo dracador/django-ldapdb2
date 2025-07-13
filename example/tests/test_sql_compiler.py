@@ -1,4 +1,4 @@
-from example.models import LDAPGroup, LDAPUser
+from example.models import LDAPUser
 from .base import LDAPTestCase, get_new_ldap_search
 from .constants import TEST_LDAP_ADMIN_USER_1, TEST_LDAP_AVAILABLE_USERS, TEST_LDAP_GROUP_1, TEST_LDAP_USER_1
 
@@ -46,18 +46,6 @@ class SQLCompilerTestCase(LDAPTestCase):
     --- Renaming ---
     u = LDAPUser.objects.get(uid='test'); u.uid = 'test_renamed'; u.save()
     """
-
-    @staticmethod
-    def _get_group_1_object():
-        return LDAPGroup.objects.get(name=TEST_LDAP_GROUP_1.name)
-
-    @staticmethod
-    def _get_user_1_object():
-        return LDAPUser.objects.get(username=TEST_LDAP_USER_1.username)
-
-    @staticmethod
-    def get_testuser_objects():
-        return LDAPUser.objects.filter(username__in=[u.username for u in TEST_LDAP_AVAILABLE_USERS])
 
     def test_ldapgroup_get(self):
         obj = self._get_group_1_object()

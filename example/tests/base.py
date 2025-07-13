@@ -8,7 +8,8 @@ from ldapdb.backends.ldap import LDAPSearch, LDAPSearchControlType
 from ldapdb.fields import CharField
 from ldapdb.models import LDAPModel
 
-from example.models import LDAPUser
+from example.models import LDAPGroup, LDAPUser
+from example.tests.constants import TEST_LDAP_AVAILABLE_USERS, TEST_LDAP_GROUP_1, TEST_LDAP_USER_1
 
 if TYPE_CHECKING:
     from ldapdb.models import LDAPQuery
@@ -86,6 +87,18 @@ def transform_ldap_model_dict(instance_data: dict):
 
 class LDAPTestCase(TestCase):
     databases = ['ldap']
+
+    @staticmethod
+    def _get_group_1_object():
+        return LDAPGroup.objects.get(name=TEST_LDAP_GROUP_1.name)
+
+    @staticmethod
+    def _get_user_1_object():
+        return LDAPUser.objects.get(username=TEST_LDAP_USER_1.username)
+
+    @staticmethod
+    def get_testuser_objects():
+        return LDAPUser.objects.filter(username__in=[u.username for u in TEST_LDAP_AVAILABLE_USERS])
 
     def assertDiffDict(self, real, expected, msg=None):
         # Could also use self.assertDictEqual, but this provides a little more readable output

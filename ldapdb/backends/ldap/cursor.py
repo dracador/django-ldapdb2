@@ -174,15 +174,19 @@ class DatabaseCursor:
         return rdata
 
     def set_description(self):
+        field_names = []
         if self.results:
             if self.search_obj.attrlist:
-                self.description = [(attr, None, None, None, None, None, None) for attr in self.search_obj.attrlist]
+                field_names.extend(self.search_obj.attrlist)
             else:
                 # Always prepend DN so the row is not empty, even when the
                 # compiler did not define any attributes (exists(), count(), etc).
-                self.description = [('dn', None, None, None, None, None, None)]
-        else:
-            self.description = []
+                field_names.append('dn')
+
+        if self.query.annotation_aliases:
+            field_names.extend(self.query.annotation_aliases)
+
+        self.description = [(attr, None, None, None, None, None, None) for attr in field_names]
 
     def format_results(self):
         column_names = [col[0] for col in self.description]
