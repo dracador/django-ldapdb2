@@ -35,7 +35,6 @@ class SQLInsertUpdateCompilerTestCase(LDAPTestCase):
 
     def test_create_user_save_after_creation(self):
         non_created_user = create_random_ldap_user()
-        # TODO: .save() here tries to re-create the user somehow
         non_created_user.save()
         user = LDAPUser.objects.get(username=non_created_user.username)
         self.assertEqual(user.username, non_created_user.username, "User's username should match the created value.")
