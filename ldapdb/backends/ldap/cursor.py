@@ -178,9 +178,9 @@ class DatabaseCursor:
         if self.results:
             if self.search_obj.attrlist:
                 field_names.extend(self.search_obj.attrlist)
-            else:
-                # Always prepend DN so the row is not empty, even when the
-                # compiler did not define any attributes (exists(), count(), etc).
+            elif not self.query.annotation_aliases:
+                # Only prepend DN when the row would otherwise be empty
+                # *and* the query has no annotations.
                 field_names.append('dn')
 
         if self.query.annotation_aliases:

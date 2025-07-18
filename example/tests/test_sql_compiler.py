@@ -1,3 +1,5 @@
+from collections import namedtuple
+
 from example.models import LDAPUser
 from .base import LDAPTestCase, get_new_ldap_search
 from .constants import TEST_LDAP_ADMIN_USER_1, TEST_LDAP_AVAILABLE_USERS, TEST_LDAP_GROUP_1, TEST_LDAP_USER_1
@@ -132,12 +134,32 @@ class SQLCompilerTestCase(LDAPTestCase):
         )
 
     def test_ldapuser_values_list(self):
-        queryset = self.get_testuser_objects().order_by('username').values_list('name', flat=True)
+        queryset = self.get_testuser_objects().values_list('name')
+        expected_ldap_search = get_new_ldap_search(attrlist=['cn'], filterstr='(|(uid=admin)(uid=user1)(uid=user2))')
+        self.assertLDAPSearchIsEqual(queryset, expected_ldap_search)
+        self.assertQuerySetEqual(
+            queryset,
+            [(u.name,) for u in TEST_LDAP_AVAILABLE_USERS],
+        )
+
+    def test_ldapuser_values_list_flat(self):
+        queryset = self.get_testuser_objects().values_list('name', flat=True)
         expected_ldap_search = get_new_ldap_search(attrlist=['cn'], filterstr='(|(uid=admin)(uid=user1)(uid=user2))')
         self.assertLDAPSearchIsEqual(queryset, expected_ldap_search)
         self.assertQuerySetEqual(
             queryset,
             [u.name for u in TEST_LDAP_AVAILABLE_USERS],
+        )
+
+    def test_ldapuser_values_list_named(self):
+        values = ['name']
+        queryset = self.get_testuser_objects().values_list(*values, named=True)
+        expected_ldap_search = get_new_ldap_search(attrlist=['cn'], filterstr='(|(uid=admin)(uid=user1)(uid=user2))')
+        self.assertLDAPSearchIsEqual(queryset, expected_ldap_search)
+        row_tuple = namedtuple('Row', values)
+        self.assertQuerySetEqual(
+            queryset,
+            [row_tuple(u.name) for u in TEST_LDAP_AVAILABLE_USERS],
         )
 
     def test_ldapuser_order_first(self):

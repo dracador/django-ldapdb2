@@ -11,7 +11,7 @@ def create_random_ldap_user(do_not_create: bool = False, **kwargs) -> LDAPUser:
     default_kwargs = {
         # dn=f'uid={username},ou=Users,dc=example,dc=org',
         'first_name': first_name,
-        'last_name': first_name,
+        'last_name': last_name,
         'mail': f'{username}@example.com',
         'name': f'{first_name} {last_name}',
         'username': username,

@@ -7,7 +7,13 @@ from django.db.models.sql import Query
 
 from .exceptions import LDAPModelTypeError
 from .fields import DistinguishedNameField
-from .iterables import LDAPExpressionIterable
+from .iterables import (
+    LDAPFlatValuesListIterable,
+    LDAPModelIterable,
+    LDAPNamedValuesListIterable,
+    LDAPValuesIterable,
+    LDAPValuesListIterable,
+)
 
 if TYPE_CHECKING:
     from .backends.ldap import LDAPSearch
@@ -27,11 +33,32 @@ class LDAPQuery(Query):
 
 
 class LDAPQuerySet(QuerySet):
+    query: LDAPQuery
+
     def __init__(self, model=None, query=None, using=None, hints=None):
         if query is None:
             query = LDAPQuery(model)
         super().__init__(model=model, query=query, using=using, hints=hints)
-        self._iterable_class = LDAPExpressionIterable
+        self._iterable_class = LDAPModelIterable
+
+    def values(self, *fields, **expressions):
+        qs = super().values(*fields, **expressions)
+        qs._iterable_class = LDAPValuesIterable
+        return qs
+
+    def values_list(self, *fields, **kwargs):
+        flat = kwargs.get('flat', False)
+        named = kwargs.get('named', False)
+
+        qs = super().values_list(*fields, **kwargs)
+
+        if named:
+            qs._iterable_class = LDAPNamedValuesListIterable
+        elif flat:
+            qs._iterable_class = LDAPFlatValuesListIterable
+        else:
+            qs._iterable_class = LDAPValuesListIterable
+        return qs
 
     def raw(self, *_args, **_kwargs):
         # Maybe allow raw to take an LDIF input or an LDAPSearch instance?
