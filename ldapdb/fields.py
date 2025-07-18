@@ -186,6 +186,7 @@ class IntegerField(django_fields.IntegerField, LDAPField):
 
 class MemberField(DistinguishedNameField):
     multi_valued_field = True
+    update_strategy = UpdateStrategy.ADD_DELETE
 
 
 class DateField(django_fields.DateField):
