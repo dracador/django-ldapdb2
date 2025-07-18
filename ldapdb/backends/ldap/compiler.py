@@ -305,7 +305,7 @@ class SQLUpdateCompiler(compiler.SQLUpdateCompiler, SQLCompiler):
 
         if not mod:
             logger.debug('No changes after diff for %s — skipping modify_s().', dn)
-            return 0
+            return 1
 
         logger.debug('LDAP modify request for %s\n%s', dn, mod)
 
