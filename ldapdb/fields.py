@@ -1,3 +1,4 @@
+import datetime
 import enum
 from typing import TYPE_CHECKING, Any
 
@@ -189,7 +190,29 @@ class MemberField(DistinguishedNameField):
     update_strategy = UpdateStrategy.ADD_DELETE
 
 
-class DateField(django_fields.DateField):
-    def __init__(self, *args, fmt='%Y-%m-%d', **kwargs):
+class DateField(django_fields.DateField, LDAPField):
+    def __init__(self, *args, fmt: str | None = None, **kwargs):
         self.date_format = fmt
+        super().__init__(*args, **kwargs)
+
+    def from_db_value(self, value: str | bytes | datetime.date | datetime.datetime | None, expression, connection):
+        value = super().from_db_value(value, expression, connection)
+        if value is None:
+            return None
+        if isinstance(value, str):
+            if self.date_format is None:
+                value = datetime.datetime.fromisoformat(value).date()
+            else:
+                value = datetime.datetime.strptime(value, self.date_format).date()
+        return value
+
+    def get_db_prep_value(self, value: Any, connection: 'DatabaseWrapper', prepared: bool = False):
+        value = super().get_db_prep_value(value, connection, prepared)
+        print(f'wtf: {value=}')
+        return value
+
+
+class DateTimeField(django_fields.DateTimeField, LDAPField):
+    def __init__(self, *args, fmt='%Y-%m-%d', **kwargs):
+        # self.date_format = fmt  # TODO: Do we even need this?
         super().__init__(*args, **kwargs)

@@ -15,6 +15,7 @@ def create_random_ldap_user(do_not_create: bool = False, **kwargs) -> LDAPUser:
         'mail': f'{username}@example.com',
         'name': f'{first_name} {last_name}',
         'username': username,
+        'is_active': True,
     }
     if do_not_create:
         return LDAPUser(**{**default_kwargs, **kwargs})
