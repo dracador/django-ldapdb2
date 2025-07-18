@@ -1,3 +1,5 @@
+from collections import namedtuple
+
 from django.db.models import Value
 from django.db.models.functions import Lower, LTrim, RTrim, Trim, Upper
 
@@ -11,7 +13,7 @@ class AnnotationTestCase(LDAPTestCase):
     @classmethod
     def setUpTestData(cls):
         if not cls.user:
-            cls.user = LDAPUser.objects.create(
+            cls.user, _created = LDAPUser.objects.get_or_create(
                 username="annotation_test",
                 name=" Annotation  Test ",
                 first_name="Annotation",
@@ -25,6 +27,23 @@ class AnnotationTestCase(LDAPTestCase):
     def test_annotation_expression_value(self):
         u = self.get_annotation_qs().annotate(one=Value(1)).first()
         self.assertEqual(u.one, 1)
+
+    def test_annotation_expression_value_values(self):
+        values = self.get_annotation_qs().annotate(one=Value(1)).values().first()
+        self.assertEqual(values['one'], 1)
+
+    def test_annotation_expression_value_values_list(self):
+        values = self.get_annotation_qs().annotate(one=Value(1)).values_list('one')
+        self.assertEqual(list(values), [(1,)])
+
+    def test_annotation_expression_value_values_list_flat(self):
+        values = self.get_annotation_qs().annotate(one=Value(1)).values_list('one', flat=True)
+        self.assertEqual(list(values), [1])
+
+    def test_annotation_expression_value_values_list_named(self):
+        value_row = self.get_annotation_qs().annotate(one=Value(1)).values_list('one', named=True).first()
+        row_tuple_cls = namedtuple('Row', 'one')
+        self.assertEqual(value_row, row_tuple_cls(one=1),)
 
     def test_annotation_expression_lower(self):
         u = self.get_annotation_qs().annotate(lower=Lower('username')).first()
