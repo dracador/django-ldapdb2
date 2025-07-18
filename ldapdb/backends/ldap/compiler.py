@@ -9,7 +9,7 @@ from django.db.models.fields import Field
 from django.db.models.lookups import Exact, In
 from django.db.models.sql import compiler
 from django.db.models.sql.compiler import PositionRef, SQLCompiler as BaseSQLCompiler
-from django.db.models.sql.constants import GET_ITERATOR_CHUNK_SIZE, MULTI
+from django.db.models.sql.constants import CURSOR, GET_ITERATOR_CHUNK_SIZE, MULTI
 from django.db.models.sql.where import WhereNode
 
 from ldapdb.exceptions import LDAPModelTypeError
@@ -18,6 +18,12 @@ from ldapdb.models import LDAPModel, LDAPQuery
 from ldapdb.utils import escape_ldap_filter_value
 from .ldif_helpers import AddRequest, ModifyRequest
 from .lib import LDAPSearch, LDAPSearchControlType
+
+try:
+    from django.db.models.sql.constants import ROW_COUNT
+except ImportError:
+    # Django 5.2 introduced new ROW_COUNT constant
+    ROW_COUNT = 'row count'
 
 if TYPE_CHECKING:
     from .base import DatabaseWrapper
@@ -357,7 +363,14 @@ class SQLInsertCompiler(compiler.SQLInsertCompiler, SQLCompiler):
 
 
 class SQLDeleteCompiler(compiler.SQLDeleteCompiler, SQLCompiler):
-    def execute_sql(self, *_args, **_kwargs):
+    def execute_sql(
+        self,
+
+        # result_type here is set via DeleteQuery.do_query().
+        # Starting with Django 5.2 it should be ROW_COUNT. Before that it was CURSOR.
+        result_type=MULTI,
+        **_kwargs,
+    ):
         model = cast('LDAPModel', self.query.model)
         db = self.connection
         ldap_conn = db.connection
@@ -370,10 +383,16 @@ class SQLDeleteCompiler(compiler.SQLDeleteCompiler, SQLCompiler):
         with self.connection.wrap_database_errors:
             try:
                 ldap_conn.delete_s(dn)
+                deleted_count = 1
             except ldap.NO_SUCH_OBJECT:
-                return 0
+                deleted_count = 0
 
-        return 1
+        if result_type is CURSOR:  # Django <= 5.1
+            cur = self.connection.cursor()
+            cur.rowcount = deleted_count
+            return cur
+
+        return deleted_count
 
 
 class SQLAggregateCompiler(compiler.SQLAggregateCompiler, SQLCompiler):
