@@ -26,6 +26,8 @@ except ImportError:
     ROW_COUNT = 'row count'
 
 if TYPE_CHECKING:
+    from ldap.ldapobject import ReconnectLDAPObject
+
     from .base import DatabaseWrapper
 
 logger = logging.getLogger(__name__)
@@ -54,6 +56,26 @@ class SQLCompiler(BaseSQLCompiler):
         self.annotation_aliases = []
         self.field_mapping = {field.attname: field.column for field in model._meta.fields}
         self.reverse_field_mapping = {field.column: field for field in model._meta.fields}
+
+    def _get_ldap_conn(self) -> 'ReconnectLDAPObject':
+        """
+        Makes sure the connection is established and returns the underlying LDAP connection object.
+        The alternative to this method would be to use something like the following:
+
+        with self.connection.cursor() as cursor:
+            cursor.db.connection.add_s(dn, add.as_modlist())
+
+        That however always builds a new cursor object, which is not needed here,
+        since we don't use anything in the cursor.
+        Maybe revisit this later if we need to use cursors for something else.
+        Something like django-debug-toolbar would use the cursor to display the executed queries,
+        but since we want to provide proper LDAP search/query information,
+        we'd have to implement custom handling via Signals or another solution, anyway.
+
+        Also: This works without ensure_connection() for django versions >= 5.1. Not for 4.2.
+        """
+        self.connection.ensure_connection()
+        return self.connection.connection
 
     def _pk_value_from_where(self):
         # only used in Update and Delete compilers
@@ -255,7 +277,7 @@ class SQLUpdateCompiler(compiler.SQLUpdateCompiler, SQLCompiler):
     def execute_sql(self, returning_fields=None):  # noqa: ARG002 - don't need returning_fields, we just force another search
         model = cast('LDAPModel', self.query.model)
         db = cast('DatabaseWrapper', self.connection)
-        ldap_conn = db.connection
+        ldap_conn = self._get_ldap_conn()
         charset = db.charset
 
         pk_val = self._pk_value_from_where()
@@ -327,7 +349,7 @@ class SQLInsertCompiler(compiler.SQLInsertCompiler, SQLCompiler):
         obj = self.query.objs[0]
         model = cast('LDAPModel', self.query.model)
         db = cast('DatabaseWrapper', self.connection)
-        ldap_conn = db.connection
+        ldap_conn = self._get_ldap_conn()
 
         # build DN
         pk_field = model._meta.pk
@@ -365,15 +387,13 @@ class SQLInsertCompiler(compiler.SQLInsertCompiler, SQLCompiler):
 class SQLDeleteCompiler(compiler.SQLDeleteCompiler, SQLCompiler):
     def execute_sql(
         self,
-
         # result_type here is set via DeleteQuery.do_query().
         # Starting with Django 5.2 it should be ROW_COUNT. Before that it was CURSOR.
         result_type=MULTI,
         **_kwargs,
     ):
         model = cast('LDAPModel', self.query.model)
-        db = self.connection
-        ldap_conn = db.connection
+        ldap_conn = self._get_ldap_conn()
 
         pk_val = self._pk_value_from_where()
         dn = f'{model._meta.pk.column}={pk_val},{model.base_dn}'
