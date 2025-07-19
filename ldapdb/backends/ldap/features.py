@@ -1,6 +1,7 @@
 from functools import cached_property
 from typing import TYPE_CHECKING
 
+from django import VERSION as DJANGO_VERSION
 from django.db.backends.base.features import BaseDatabaseFeatures
 from ldap.controls import SimplePagedResultsControl
 from ldap.controls.sss import SSSRequestControl
@@ -175,5 +176,10 @@ class DatabaseFeatures(BaseDatabaseFeatures):
     @cached_property
     def supports_transactions(self) -> bool:
         """Confirm support for transactions. Transactions have been introduced in OpenLDAP 2.5"""
+        if DJANGO_VERSION < (5, 1):
+            # We currently don't really support transactions yet but we can at least check if the server supports them.
+            # Django 5.1+ can still handle normal operations without transactions even if this property is True.
+            return False
+
         tx_oids = {LDAP_OID_TRANSACTION_START, LDAP_OID_TRANSACTION_END}
         return tx_oids.issubset(self.supported_extensions)
