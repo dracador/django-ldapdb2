@@ -1,10 +1,12 @@
 import enum
 import re
-from datetime import UTC, date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any
+from zoneinfo import ZoneInfo
 
 from django.core.exceptions import FieldError
 from django.db.models import Lookup, fields as django_fields
+from django.utils.timezone import is_naive
 
 from .validators import validate_dn
 
@@ -42,9 +44,7 @@ class LDAPField(django_fields.Field):
         super().__init__(*args, **kwargs)
 
         if not kwargs.get('db_column'):
-            raise ValueError(
-                f"{self.__class__.__name__} needs an explicit db_column argument"
-            )
+            raise ValueError(f'{self.__class__.__name__} needs an explicit db_column argument')
 
         if hidden is not None:
             self.hidden = hidden
@@ -234,7 +234,7 @@ def parse_generalized_time(s: str) -> datetime:
 
     tz = parts['tz']
     if tz == 'Z' or tz is None:
-        dt = dt.replace(tzinfo=UTC)
+        dt = dt.replace(tzinfo=ZoneInfo('UTC'))
     else:
         sign = 1 if tz[0] == '+' else -1
         offset = (
@@ -253,12 +253,12 @@ def format_generalized_time(dt: date | datetime, include_tz: bool = False) -> st
         dt = datetime(year=dt.year, month=dt.month, day=dt.day)
 
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=UTC)
+        dt = dt.astimezone(ZoneInfo('UTC'))
 
     if include_tz:
         return dt.strftime('%Y%m%d%H%M%S%z')
 
-    dt = dt.astimezone(UTC)
+    dt = dt.astimezone(ZoneInfo('UTC'))
     return dt.strftime('%Y%m%d%H%M%SZ')
 
 
@@ -285,6 +285,9 @@ class DateTimeField(LDAPField, django_fields.DateTimeField):
         if isinstance(value, str):
             value = datetime.strptime(value, self.date_format)
 
+        if isinstance(value, datetime) and is_naive(value):
+            value = value.replace(tzinfo=ZoneInfo('UTC'))
+
         value = format_generalized_time(value, include_tz=self.include_tz)
         return value
 
@@ -305,6 +308,7 @@ class DateField(DateTimeField, django_fields.DateField):
     def get_prep_value(self, value: str | date | datetime):
         if value is None:
             return None
-        if isinstance(value, date) and not isinstance(value, datetime):
+
+        if isinstance(value, datetime):
             value = date(year=value.year, month=value.month, day=value.day)
         return super().get_prep_value(value)

@@ -35,7 +35,7 @@ class DateTimeWithTimezoneTestModel(BaseLDAPTestUser):
 
 class DateFieldTests(LDAPTestCase):
     def test_date_formatting_utc(self):
-        datetime_obj = datetime.datetime(1990, 1, 1, 1, 0, 0, tzinfo=datetime.UTC)
+        datetime_obj = datetime.datetime(1990, 1, 1, 1, 0, 0, tzinfo=ZoneInfo('UTC'))
         self.assertEqual(format_generalized_time(datetime_obj), '19900101010000Z')
 
     def test_date_formatting_with_tz_to_utc(self):
@@ -49,7 +49,7 @@ class DateFieldTests(LDAPTestCase):
         self.assertEqual(obj, '19900101010000+0100')
 
     def test_date_parsing(self):
-        datetime_obj = datetime.datetime(1990, 1, 1, 1, 0, 0, tzinfo=datetime.UTC)
+        datetime_obj = datetime.datetime(1990, 1, 1, 1, 0, 0, tzinfo=ZoneInfo('UTC'))
         self.assertEqual(parse_generalized_time('19900101010000Z'), datetime_obj)
 
     def test_date_parsing_and_formatting_with_tz(self):
@@ -68,14 +68,14 @@ class DateFieldTests(LDAPTestCase):
 
     def test_date_field_string(self):
         d = datetime.date(1990, 1, 1)
-        instance = DateTestModel(date_field='1990-01-01 01:00:00', username=generate_random_username())
+        instance = DateTestModel(date_field='1990-01-01', username=generate_random_username())
         instance.full_clean()
         instance.save()
         instance.refresh_from_db()
         self.assertEqual(instance.date_field, d)
 
     def test_datetime_field_object(self):
-        dt = datetime.datetime(1990, 1, 1, hour=1, tzinfo=datetime.UTC)
+        dt = datetime.datetime(1990, 1, 1, hour=1, tzinfo=ZoneInfo('UTC'))
         instance = DateTimeTestModel(date_time_field=dt, username=generate_random_username())
         instance.full_clean()
         instance.save()
@@ -83,7 +83,7 @@ class DateFieldTests(LDAPTestCase):
         self.assertEqual(instance.date_time_field, dt)
 
     def test_datetime_field_string(self):
-        dt = datetime.datetime(1990, 1, 1, hour=1, tzinfo=datetime.UTC)
+        dt = datetime.datetime(1990, 1, 1, hour=1, tzinfo=ZoneInfo('UTC'))
         instance = DateTimeTestModel(date_time_field='1990-01-01 01:00:00', username=generate_random_username())
         instance.full_clean()
         instance.save()
