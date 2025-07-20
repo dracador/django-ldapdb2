@@ -2,7 +2,6 @@ import hashlib
 import logging
 import os
 from base64 import b64encode
-from operator import call
 from typing import TYPE_CHECKING
 
 from django.db import connections
@@ -22,7 +21,7 @@ def initialize_connection(using=None):
     if using is None:
         using = Router().default_database
 
-    db_wrapper: DatabaseWrapper = call('DatabaseWrapper', connections[using])
+    db_wrapper: DatabaseWrapper = connections[using]  # type: ignore[assignment]
     return db_wrapper.get_new_connection()
 
 
