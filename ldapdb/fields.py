@@ -38,6 +38,12 @@ class LDAPField(django_fields.Field):
         :param kwargs:
         """
         super().__init__(*args, **kwargs)
+
+        if not kwargs.get('db_column'):
+            raise ValueError(
+                f"{self.__class__.__name__} needs an explicit db_column argument"
+            )
+
         if hidden is not None:
             self.hidden = hidden
 
