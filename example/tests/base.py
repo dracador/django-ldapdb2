@@ -147,9 +147,11 @@ class BaseLDAPTestUser(LDAPModel):
     """
 
     base_dn = 'ou=Users,dc=example,dc=org'
-    object_classes = ['inetOrgPerson', 'organizationalPerson']
+    object_classes = ['inetOrgPerson', 'organizationalPerson', 'x-extendedUser']
 
     username = CharField(db_column='uid', primary_key=True)
+    last_name = CharField(db_column='sn', default='default_last_name')
+    name = CharField(db_column='cn', default='default_name')
 
     class Meta:
         abstract = True
