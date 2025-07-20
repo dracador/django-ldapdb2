@@ -5,8 +5,8 @@ import ldap
 from django.db.models import QuerySet
 from django.test import TestCase
 from ldapdb.backends.ldap import LDAPSearch, LDAPSearchControlType
-from ldapdb.fields import CharField
 from ldapdb.models import LDAPModel
+from ldapdb.models.fields import CharField
 
 from example.models import LDAPGroup, LDAPUser
 from example.tests.constants import TEST_LDAP_AVAILABLE_USERS, TEST_LDAP_GROUP_1, TEST_LDAP_USER_1

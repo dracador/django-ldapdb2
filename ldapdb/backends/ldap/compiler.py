@@ -13,8 +13,8 @@ from django.db.models.sql.constants import CURSOR, GET_ITERATOR_CHUNK_SIZE, MULT
 from django.db.models.sql.where import WhereNode
 
 from ldapdb.exceptions import LDAPModelTypeError
-from ldapdb.fields import UpdateStrategy
 from ldapdb.models import LDAPModel, LDAPQuery
+from ldapdb.models.fields import UpdateStrategy
 from ldapdb.utils import escape_ldap_filter_value
 from .ldif_helpers import AddRequest, ModifyRequest
 from .lib import LDAPSearch, LDAPSearchControlType

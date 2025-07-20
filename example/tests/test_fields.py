@@ -1,7 +1,7 @@
 import datetime
 from zoneinfo import ZoneInfo
 
-from ldapdb.fields import BooleanField, DateField, DateTimeField, format_generalized_time, parse_generalized_time
+from ldapdb.models.fields import BooleanField, DateField, DateTimeField, format_generalized_time, parse_generalized_time
 
 from .base import BaseLDAPTestUser, LDAPTestCase
 from .generator import generate_random_username

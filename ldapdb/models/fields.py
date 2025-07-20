@@ -8,10 +8,10 @@ from django.core.exceptions import FieldError
 from django.db.models import Lookup, fields as django_fields
 from django.utils.timezone import is_naive
 
-from .validators import validate_dn
+from ldapdb.validators import validate_dn
 
 if TYPE_CHECKING:
-    from .backends.ldap.base import DatabaseWrapper
+    from ldapdb.backends.ldap.base import DatabaseWrapper
 
 
 class UpdateStrategy(str, enum.Enum):

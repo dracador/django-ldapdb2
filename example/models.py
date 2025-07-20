@@ -1,5 +1,6 @@
 import ldap
-from ldapdb.fields import (
+from ldapdb.models import LDAPModel
+from ldapdb.models.fields import (
     BinaryField,
     BooleanField,
     CharField,
@@ -10,7 +11,6 @@ from ldapdb.fields import (
     MemberField,
     TextField,
 )
-from ldapdb.models import LDAPModel
 
 
 class BaseLDAPUser(LDAPModel):

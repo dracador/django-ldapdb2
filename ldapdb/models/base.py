@@ -5,18 +5,18 @@ from django.db import models as django_models
 from django.db.models import QuerySet
 from django.db.models.sql import Query
 
-from .exceptions import LDAPModelTypeError
-from .fields import DistinguishedNameField
-from .iterables import (
+from ldapdb.exceptions import LDAPModelTypeError
+from ldapdb.iterables import (
     LDAPFlatValuesListIterable,
     LDAPModelIterable,
     LDAPNamedValuesListIterable,
     LDAPValuesIterable,
     LDAPValuesListIterable,
 )
+from .fields import DistinguishedNameField
 
 if TYPE_CHECKING:
-    from .backends.ldap import LDAPSearch
+    from ldapdb.backends.ldap import LDAPSearch
 
 
 class LDAPQuery(Query):
