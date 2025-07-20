@@ -3,6 +3,13 @@ from faker import Faker
 from example.models import LDAPUser
 
 
+def generate_random_username() -> str:
+    fake = Faker()
+    first_name = fake.first_name()
+    last_name = fake.last_name()
+    return f'{first_name.lower()}.{last_name.lower()}'
+
+
 def create_random_ldap_user(do_not_create: bool = False, **kwargs) -> LDAPUser:
     fake = Faker()
     first_name = fake.first_name()
