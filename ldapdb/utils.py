@@ -2,6 +2,8 @@ import hashlib
 import logging
 import os
 from base64 import b64encode
+from operator import call
+from typing import TYPE_CHECKING
 
 from django.db import connections
 
@@ -10,12 +12,17 @@ from .router import Router
 
 logger = logging.getLogger(__name__)
 
+if TYPE_CHECKING:
+    from ldapdb.backends.ldap.base import DatabaseWrapper
+
 
 def initialize_connection(using=None):
     """Shortcut to getting a ReconnectLDAPObject from our database backend."""
+
     if using is None:
         using = Router().default_database
-    db_wrapper = connections[using]
+
+    db_wrapper: DatabaseWrapper = call('DatabaseWrapper', connections[using])
     return db_wrapper.get_new_connection()
 
 
