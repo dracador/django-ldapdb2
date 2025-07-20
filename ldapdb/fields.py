@@ -1,8 +1,12 @@
 import enum
+import re
+from datetime import date, datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any
+from zoneinfo import ZoneInfo
 
 from django.core.exceptions import FieldError
 from django.db.models import Lookup, fields as django_fields
+from django.utils.timezone import is_naive
 
 from .validators import validate_dn
 
@@ -38,6 +42,10 @@ class LDAPField(django_fields.Field):
         :param kwargs:
         """
         super().__init__(*args, **kwargs)
+
+        if not kwargs.get('db_column'):
+            raise ValueError(f'{self.__class__.__name__} needs an explicit db_column argument')
+
         if hidden is not None:
             self.hidden = hidden
 
@@ -189,7 +197,118 @@ class MemberField(DistinguishedNameField):
     update_strategy = UpdateStrategy.ADD_DELETE
 
 
-class DateField(django_fields.DateField):
-    def __init__(self, *args, fmt='%Y-%m-%d', **kwargs):
-        self.date_format = fmt
+_GTIME_RE = re.compile(
+    r"""
+    ^
+    (?P<year>\d{4})
+    (?P<mon>\d{2})?
+    (?P<day>\d{2})?
+    (?P<hour>\d{2})?
+    (?P<minute>\d{2})?
+    (?P<second>\d{2})?
+    (?:\.(?P<frac>\d+))?          # fractional seconds
+    (?P<tz>Z|[+\-]\d{4})?         # 'Z' or ±HHMM
+    $
+    """,
+    re.VERBOSE,
+)
+
+
+def parse_generalized_time(s: str) -> datetime:
+    m = _GTIME_RE.match(s)
+    if not m:
+        raise ValueError(f'Invalid GeneralizedTime value: {s!r}')
+
+    parts = {k: int(v) if v and k not in ['frac', 'tz'] else v for k, v in m.groupdict().items()}
+
+    # Missing components default to minimal valid value (RFC says that is OK)
+    dt = datetime(
+        parts['year'],
+        parts['mon'] or 1,
+        parts['day'] or 1,
+        parts['hour'] or 0,
+        parts['minute'] or 0,
+        parts['second'] or 0,
+        int(float(f"0.{parts['frac']}") * 1_000_000) if parts['frac'] else 0,
+    )
+
+    tz = parts['tz']
+    if tz == 'Z' or tz is None:
+        dt = dt.replace(tzinfo=ZoneInfo('UTC'))
+    else:
+        sign = 1 if tz[0] == '+' else -1
+        offset = (
+            timedelta(
+                hours=int(tz[1:3]),
+                minutes=int(tz[3:5]),
+            )
+            * sign
+        )
+        dt = dt.replace(tzinfo=timezone(offset))
+    return dt
+
+
+def format_generalized_time(dt: date | datetime, include_tz: bool = False) -> str:
+    if isinstance(dt, date) and not isinstance(dt, datetime):
+        dt = datetime(year=dt.year, month=dt.month, day=dt.day)
+
+    if dt.tzinfo is None:
+        dt = dt.astimezone(ZoneInfo('UTC'))
+
+    if include_tz:
+        return dt.strftime('%Y%m%d%H%M%S%z')
+
+    dt = dt.astimezone(ZoneInfo('UTC'))
+    return dt.strftime('%Y%m%d%H%M%SZ')
+
+
+class DateTimeField(LDAPField, django_fields.DateTimeField):
+    default_date_format = '%Y-%m-%d %H:%M:%S %z'
+
+    def __init__(self, *args, fmt: str | None = None, include_tz: bool = False, **kwargs):
+        self.date_format = fmt or self.default_date_format
+        self.include_tz = include_tz
         super().__init__(*args, **kwargs)
+
+    def from_db_value(self, value, expression, connection):
+        value = super().from_db_value(value, expression, connection)
+        if value is None:
+            return None
+
+        dt = parse_generalized_time(value)
+        return dt
+
+    def get_prep_value(self, value: str | datetime) -> str | None:
+        if value is None:
+            return None
+
+        if isinstance(value, str):
+            value = datetime.strptime(value, self.date_format)
+
+        if isinstance(value, datetime) and is_naive(value):
+            value = value.replace(tzinfo=ZoneInfo('UTC'))
+
+        value = format_generalized_time(value, include_tz=self.include_tz)
+        return value
+
+
+class DateField(DateTimeField, django_fields.DateField):
+    default_date_format = '%Y-%m-%d'
+
+    def __init__(self, *args, **kwargs):
+        kwargs['include_tz'] = False
+        super().__init__(*args, **kwargs)
+
+    def from_db_value(self, *args, **kwargs):
+        value: datetime = super().from_db_value(*args, **kwargs)
+        if value is None:
+            return None
+        return value.date()
+
+    def get_prep_value(self, value: str | date | datetime):
+        if value is None:
+            return None
+
+        if isinstance(value, datetime):
+            value = date(year=value.year, month=value.month, day=value.day)
+        return super().get_prep_value(value)

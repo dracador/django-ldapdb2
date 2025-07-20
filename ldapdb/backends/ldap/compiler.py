@@ -304,7 +304,7 @@ class SQLUpdateCompiler(compiler.SQLUpdateCompiler, SQLCompiler):
                 prepped = field.get_db_prep_save(raw_val, db)
                 new_vals = list(prepped) if isinstance(prepped, list | tuple) else [prepped]
 
-            if not field.binary_field:
+            if not getattr(field, 'binary_field', False):
                 old_vals = [v.decode(charset) if isinstance(v, bytes | bytearray) else v for v in old_vals]
                 new_vals = [v.decode(charset) if isinstance(v, bytes | bytearray) else v for v in new_vals]
 
@@ -378,7 +378,6 @@ class SQLInsertCompiler(compiler.SQLInsertCompiler, SQLCompiler):
 
         with self.connection.wrap_database_errors:
             # make sure any exceptions bubble up as proper Django errors
-            print(dn, add.as_modlist())
             ldap_conn.add_s(dn, add.as_modlist())
 
         return []  # Django does not care about the return value of execute_sql() for INSERTs
