@@ -3,6 +3,8 @@ from ldapdb.fields import (
     BinaryField,
     BooleanField,
     CharField,
+    DateField,
+    DateTimeField,
     EmailField,
     IntegerField,
     MemberField,
@@ -24,11 +26,13 @@ class BaseLDAPUser(LDAPModel):
     first_name = CharField(db_column='givenName', null=True)
     last_name = CharField(db_column='sn')
     mail = EmailField(db_column='mail', null=True)
-    non_existing_attribute = CharField(db_column='nonExistingAttribute', null=True)
+    non_existing_attribute = CharField(db_column='nonExistingAttribute', blank=True, null=True)
     is_active = BooleanField(db_column='x-user-isActive')
-    department_number = IntegerField(db_column='departmentNumber', null=True)
-    description = TextField(db_column='description', null=True)
+    department_number = IntegerField(db_column='departmentNumber', blank=True, null=True)
+    description = TextField(db_column='description', blank=True, null=True)
     thumbnail_photo = BinaryField(db_column='jpegPhoto', null=True)
+    date_field = DateField(db_column='x-user-date', fmt='%Y-%m-%d', blank=True, null=True)
+    date_time_field = DateTimeField(db_column='x-user-dateTime', fmt='%Y-%m-%d %H:%M:%S', blank=True, null=True)
 
     def __str__(self):
         return self.username
