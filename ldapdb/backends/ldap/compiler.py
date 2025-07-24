@@ -18,6 +18,7 @@ from ldapdb.models.fields import UpdateStrategy
 from ldapdb.utils import escape_ldap_filter_value
 from .ldif_helpers import AddRequest, ModifyRequest
 from .lib import LDAPSearch, LDAPSearchControlType
+from .lookups import LDAP_OPERATORS
 
 try:
     from django.db.models.sql.constants import ROW_COUNT
@@ -96,6 +97,18 @@ class SQLCompiler(BaseSQLCompiler):
 
         raise NotSupportedError('UPDATE/DELETE must be filtered by the primary key.')
 
+    def _get_annotated_target_colums(self, expr):
+        from django.db.models.expressions import Col
+
+        if isinstance(expr, Col):
+            yield expr.target.column
+            return
+
+        # recurse only on real sub‑expressions
+        for node in expr.get_source_expressions() or ():
+            if node is not None:
+                yield from self._get_annotated_target_colums(node)
+
     def _compile_select(self) -> list[str]:
         """
         Compile the SELECT part of the query.
@@ -116,6 +129,13 @@ class SQLCompiler(BaseSQLCompiler):
                 attrlist.append(ldap_attr)
             else:
                 self.annotation_aliases.append(sel.alias)
+
+        # There might be columns referenced in annotations that are not selected via .values/values_list()
+        extra_cols = set()
+        for expr in self.query.annotations.values():
+            extra_cols.update(self._get_annotated_target_colums(expr))
+        attrlist.extend([attr for attr in extra_cols if attr not in attrlist])
+        self.query.annotation_source_cols = frozenset(extra_cols)  # keep them for later annotations
         return attrlist
 
     def _parse_lookup(self, lookup: Lookup) -> str:
@@ -133,10 +153,7 @@ class SQLCompiler(BaseSQLCompiler):
         lookup_type = lookup.lookup_name
 
         # TODO: Get optional operator from LDAPField
-        operator_format = self.connection.operators.get(lookup_type)
-
-        if operator_format is None:
-            raise NotImplementedError(f'Unsupported lookup type: {lookup_type}')
+        operator_format, _ = LDAP_OPERATORS.get(lookup_type, (None, None))
 
         if lookup_type == 'in':
             values = ''.join([f'({field_name}={escape_ldap_filter_value(v)})' for v in rhs])
@@ -147,11 +164,12 @@ class SQLCompiler(BaseSQLCompiler):
             ldap_filter = f'(!({field_name}=*))' if rhs else f'({field_name}=*)'
             logger.debug("Generated LDAP filter for 'isnull' lookup: %s", ldap_filter)
             return ldap_filter
-        else:
+        elif operator_format:
             escaped_value = escape_ldap_filter_value(rhs)
             ldap_filter = f'({field_name}{operator_format % escaped_value})'
             logger.debug("Generated LDAP filter for lookup '%s': %s", lookup_type, ldap_filter)
             return ldap_filter
+        raise NotImplementedError(f'Unsupported lookup type: {lookup_type}')
 
     def _where_node_to_ldap_filter(self, node: WhereNode) -> str:
         """Recursively convert a WhereNode to an LDAP filter string."""

@@ -1,6 +1,6 @@
 from collections.abc import Iterator
 from types import SimpleNamespace
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from django.db import NotSupportedError
 from django.db.models.query import (
@@ -16,7 +16,6 @@ from ldapdb.backends.ldap.expressions import eval_expr
 
 if TYPE_CHECKING:
     from collections import namedtuple
-    from typing import Any
 
     from django.db.models import Model
 
@@ -26,7 +25,7 @@ if TYPE_CHECKING:
 class LDAPBaseIterable(BaseIterable):
     queryset: 'LDAPQuerySet'
 
-    def _columns(self):
+    def _columns(self) -> list[str]:
         """
         Return the exact column order requested by the caller.
 
@@ -39,11 +38,18 @@ class LDAPBaseIterable(BaseIterable):
         # fallback for .values_list() with no arguments
         return list(self.queryset.query.values_select) + list(self.queryset.query.annotation_aliases)
 
+    def _extra_columns(self) -> list[str]:
+        q = self.queryset.query
+        return list(getattr(q, "annotation_source_cols", ())) or list(q.values_select)
+
     def __iter__(self) -> Iterator:
         for raw in super().__iter__():  # type: ignore[attr-defined]
-            data = self._row_to_dict(raw)
-            self._evaluate_annotations(data)
-            output = self._dict_to_output(raw, data)
+            columns = self._columns()
+            extra_columns = self._extra_columns()
+
+            row = self._row_to_dict(raw, columns, extra_columns)
+            self._evaluate_annotations(row)
+            output = self._dict_to_output(raw, columns)
             yield output
 
     def _evaluate_annotations(self, row_dict: dict) -> None:
@@ -58,48 +64,53 @@ class LDAPBaseIterable(BaseIterable):
             except NotImplementedError as e:
                 raise NotSupportedError(f'Expression {expr.__class__.__name__} not supported in LDAP queries') from e
 
-    def _row_to_dict(self, raw) -> dict:
+    def _row_to_dict(self, raw: Any, columns: list[str], extra_columns: list[str]) -> dict:
         raise NotImplementedError()
 
-    def _dict_to_output(self, raw, data: dict):
+    def _dict_to_output(self, raw, columns: list[str]):
         raise NotImplementedError()
 
 
 class LDAPModelIterable(LDAPBaseIterable, ModelIterable):
-    def _row_to_dict(self, obj: 'Model') -> dict:
+    def _row_to_dict(self, obj: 'Model', *_) -> dict:
         return obj.__dict__
 
-    def _dict_to_output(self, obj: 'Model', _data: dict) -> 'Model':
+    def _dict_to_output(self, obj: 'Model', *_) -> 'Model':
         return obj
 
 
 class LDAPValuesIterable(LDAPBaseIterable, ValuesIterable):
-    def _row_to_dict(self, data: dict) -> dict:
-        return data
+    def _row_to_dict(self, raw_dict, *_):
+        return raw_dict
 
-    def _dict_to_output(self, _raw, data: dict):
-        return data
+    def _dict_to_output(self, row, *_):
+        return row
 
 
 class LDAPValuesListIterable(LDAPBaseIterable, ValuesListIterable):
-    def _row_to_dict(self, raw: tuple):
-        return dict(zip(self._columns(), raw, strict=False))
+    def _row_to_dict(self, raw_tuple, columns, extra):
+        data = dict(zip(columns, raw_tuple, strict=False))
+        for col in extra:
+            data.setdefault(col, None)
+        return data
 
-    def _dict_to_output(self, _raw: tuple, data: dict) -> tuple:
-        return tuple(data[c] for c in self._columns())
+    def _dict_to_output(self, row, columns):
+        return tuple(row[col] for col in columns)
 
 
 class LDAPFlatValuesListIterable(LDAPBaseIterable, FlatValuesListIterable):
-    def _row_to_dict(self, raw: 'Any') -> dict:
-        col = self._columns()[0]
-        return {col: raw}
+    def _row_to_dict(self, raw_scalar, logical, source):
+        data = {source[0]: raw_scalar}
+        for col in logical:
+            data.setdefault(col, None)
+        return data
 
-    def _dict_to_output(self, _raw: 'Any', data: dict):
-        return data[self._columns()[0]]
+    def _dict_to_output(self, row, logical):
+        return row[logical[0]]
 
 
 class LDAPNamedValuesListIterable(LDAPBaseIterable, NamedValuesListIterable):
-    def _row_to_dict(self, named: 'namedtuple') -> dict:
+    def _row_to_dict(self, named: 'namedtuple', *_) -> dict:
         return named._asdict()
 
     def _dict_to_output(self, named: 'namedtuple', data: dict) -> 'namedtuple':

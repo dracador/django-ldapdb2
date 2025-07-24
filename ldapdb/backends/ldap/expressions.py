@@ -16,6 +16,10 @@ from django.db.models.functions import (
     Trim,
     Upper,
 )
+from django.db.models.lookups import Lookup
+from django.db.models.sql.where import WhereNode
+
+from ldapdb.backends.ldap.lookups import LDAP_OPERATORS
 
 _ARITHM_OPS = {
     '+': add,
@@ -31,12 +35,26 @@ _ARITHM_OPS = {
 }
 
 
+def eval_lookup(expr: Lookup, instance):
+    lhs_val = eval_expr(expr.lhs, instance)
+    rhs_val = expr.rhs
+
+    if expr.lookup_name == "in" and not isinstance(rhs_val, list | tuple | set):
+        rhs_val = list(rhs_val)
+
+    _, py_fn = LDAP_OPERATORS[expr.lookup_name]
+    return py_fn(lhs_val, rhs_val)
+
+
 # noinspection PyUnreachableCode
 # Fixed with PyCharm 2025.2 but EAP is unusable right now
 def eval_expr(expr: Expression, instance):  # noqa: PLR0911
     match expr:
         case Col(target=field):
             return getattr(instance, field.attname)
+
+        case Lookup():
+            return eval_lookup(expr, instance)
 
         case Value(value=v):
             return v
@@ -118,9 +136,15 @@ def eval_expr(expr: Expression, instance):  # noqa: PLR0911
         #    func = _ARITHM_OPS[op]
         #    return func(lhs, rhs)
 
+        case WhereNode(children=children, connector="AND", negated=False):
+            return all(eval_expr(c, instance) for c in children)
+
+        case WhereNode(children=children, connector="OR", negated=False):
+            return any(eval_expr(c, instance) for c in children)
+
         case Case():
             for when in expr.cases:
-                if when.condition.resolve_expression(instance, allow_joins=False):
+                if eval_expr(when.condition, instance):
                     return eval_expr(when.result, instance)
             return eval_expr(expr.default, instance) if expr.default else None
 
