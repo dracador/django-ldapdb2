@@ -31,11 +31,12 @@ class DatabaseFeatures(BaseDatabaseFeatures):
     ignores_unnecessary_order_by_in_subqueries = False
     supports_regex_backreferencing = False
     supports_date_lookup_using_string = False
-    supports_timezones = False  # All timestamps are UTC
+    supports_timezones = True
     has_zoneinfo_database = False
     supports_order_by_nulls_modifier = False  # we probably could implement this in python
     allows_auto_pk_0 = False
     supports_sequence_reset = False
+    supports_comments = True
 
     # TODO: Check if we want/need introspection. Maybe for inspectdb?
     can_introspect_default = False
