@@ -73,6 +73,20 @@ class DatabaseIntrospection(BaseDatabaseIntrospection):
         _, entry = res[0]
         return SubSchema(entry)
 
+    def get_syntax(self, attribute: AttributeType) -> str:
+        """
+        Returns the syntax OID for the given attribute.
+        If the attribute is not found, returns the default data type OID.
+        """
+        if attribute.syntax:
+            return attribute.syntax
+
+        for sup in attribute.sup:
+            syntax = self.subschema.get_syntax(sup)
+            if syntax:
+                return syntax
+        return self.default_data_type
+
     def get_table_list(self, cursor: CursorWrapper | None):
         # In our implementation, a table is pointing to a specific DN from which the model will be built.
         # We *could* search via SUBTREE scope to create models of all objects we find, but for now we force "tables" to
@@ -103,7 +117,7 @@ class DatabaseIntrospection(BaseDatabaseIntrospection):
 
             default = None
             comment = ''
-            syntax = at.syntax
+            syntax = self.get_syntax(at)
             if syntax not in self.data_types_reverse:
                 comment = f'Unknown attribute type with OID: {at.syntax}. Defaulting to TextField.'
                 syntax = self.default_data_type
