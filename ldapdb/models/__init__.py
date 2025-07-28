@@ -1,6 +1,7 @@
-from .base import LDAPModel, LDAPQuery, LDAPQuerySet
+from .base import LDAPModel, LDAPModel as Model, LDAPQuery, LDAPQuerySet
 
 __all__ = [
+    'Model',
     'LDAPModel',
     'LDAPQuery',
     'LDAPQuerySet',
