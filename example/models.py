@@ -6,6 +6,7 @@ from ldapdb.models.fields import (
     CharField,
     DateField,
     DateTimeField,
+    DistinguishedNameField,
     EmailField,
     IntegerField,
     MemberField,
@@ -33,6 +34,9 @@ class BaseLDAPUser(LDAPModel):
     thumbnail_photo = BinaryField(db_column='jpegPhoto', null=True)
     date_field = DateField(db_column='x-user-date', fmt='%Y-%m-%d', blank=True, null=True)
     date_time_field = DateTimeField(db_column='x-user-dateTime', fmt='%Y-%m-%d %H:%M:%S', blank=True, null=True)
+
+    # operational attributes
+    entry_dn = DistinguishedNameField(db_column='entryDN', unique=True, read_only=True)
 
     def __str__(self):
         return self.username

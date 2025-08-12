@@ -15,6 +15,7 @@ TEST_LDAP_ADMIN_USER_1 = LDAPUser(
     username='admin',
     last_name='Admin',
     name='Admin',
+    entry_dn='uid=admin,ou=Users,dc=example,dc=org',  # operational
 )
 
 TEST_LDAP_USER_1 = LDAPUser(
@@ -26,6 +27,7 @@ TEST_LDAP_USER_1 = LDAPUser(
     username='user1',
     is_active=True,
     department_number=1,
+    entry_dn='uid=user1,ou=Users,dc=example,dc=org',  # operational
 )
 
 TEST_LDAP_USER_2 = LDAPUser(
@@ -37,6 +39,7 @@ TEST_LDAP_USER_2 = LDAPUser(
     username='user2',
     is_active=False,
     department_number=None,
+    entry_dn='uid=user2,ou=Users,dc=example,dc=org',  # operational
 )
 
 

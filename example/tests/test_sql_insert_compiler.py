@@ -1,4 +1,5 @@
-from django.db import DatabaseError, IntegrityError
+from django.core.exceptions import FieldError
+from django.db import DatabaseError, IntegrityError, transaction
 
 from example.models import LDAPUser
 from example.tests.base import LDAPTestCase
@@ -57,3 +58,41 @@ class SQLInsertUpdateCompilerTestCase(LDAPTestCase):
         user.save()
         user.refresh_from_db()
         self.assertEqual(user.mail, new_mail)
+
+    def test_readonly_attributes_create_error(self):
+        with self.assertRaises(FieldError):
+            create_random_ldap_user(
+                entry_dn='cn=someone,ou=Users,dc=example,dc=org',
+            )
+
+    def test_readonly_attributes_create_success(self):
+        # Not setting any of the operational fields should allow saving
+        instance = create_random_ldap_user(do_not_create=True)
+        instance.full_clean()
+        instance.save()
+        instance.refresh_from_db()
+        self.assertEqual(instance.dn, instance.entry_dn)
+
+    def test_readonly_attributes_save_error(self):
+        instance = create_random_ldap_user()
+        instance.entry_dn = 'uid=new-uuid-value,ou=Users,dc=smhss,dc=de'
+        with self.assertRaises(FieldError):
+            instance.save()
+            instance.refresh_from_db()
+            self.assertEqual(instance.dn, instance.entry_dn)
+
+    def test_readonly_attributes_save_error_update_fields(self):
+        instance = create_random_ldap_user()
+        instance.entry_dn = 'uid=new-uuid-value,ou=Users,dc=smhss,dc=de'
+        with self.assertRaises(FieldError), transaction.atomic(using='ldap'):
+            instance.save(update_fields=['entry_dn'])
+            instance.refresh_from_db()
+            self.assertEqual(instance.dn, instance.entry_dn)
+
+    def test_readonly_attributes_update_via_queryset(self):
+        instance = create_random_ldap_user()
+        queryset = LDAPUser.objects.filter(username=instance.username)
+        with self.assertRaises(FieldError), transaction.atomic(using='ldap'):
+            queryset.update(entry_dn='uid=new-uuid-value,ou=Users,dc=smhss,dc=de')
+            instance.refresh_from_db()
+            self.assertEqual(instance.dn, instance.entry_dn)

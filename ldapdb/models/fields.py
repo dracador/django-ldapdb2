@@ -24,6 +24,7 @@ class LDAPField(django_fields.Field):
     multi_valued_field: bool = False
     ordering_rule: str | None = None
     update_strategy: UpdateStrategy = UpdateStrategy.REPLACE
+    read_only: bool = False
 
     def __init__(
         self,
@@ -32,6 +33,7 @@ class LDAPField(django_fields.Field):
         hidden: bool = False,
         multi_valued_field: bool | None = None,
         update_strategy: UpdateStrategy | None = None,
+        read_only: bool | None = None,
         **kwargs,
     ):
         """
@@ -57,6 +59,13 @@ class LDAPField(django_fields.Field):
 
         if update_strategy is not None:
             self.update_strategy = update_strategy
+
+        # If read_only not explicitly provided, infer it from editable=False
+        # (Django's editable=False affects forms/admin only. Let's keep this behaviour as-is).
+        if read_only:
+            self.blank = True
+            self.null = True
+            self.read_only = read_only
 
     def from_db_value(self, value, expression, connection):  # noqa: ARG002
         if value is None:
@@ -93,6 +102,16 @@ class LDAPField(django_fields.Field):
         - list(bytes) if not prepared
         - list(str) if prepared
         """
+
+        if self.read_only:
+            has_value = bool(value) and value != [] if self.multi_valued_field else value not in (None, '', b'')
+            if has_value:
+                raise FieldError(
+                    f'Field "{self.name}" (LDAP attribute "{self.db_column}") is read-only and cannot be written.'
+                )
+            # Make sure this attribute is not included in write operations
+            return [] if not self.binary_field else []
+
         if prepared:
             return value
 
