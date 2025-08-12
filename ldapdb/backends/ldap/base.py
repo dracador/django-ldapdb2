@@ -12,6 +12,7 @@ from .cursor import DatabaseCursor
 from .features import DatabaseFeatures
 from .introspection import DatabaseIntrospection
 from .lib import LDAPDatabase
+from .lookups import LDAP_OPERATORS
 from .operations import DatabaseOperations
 
 
@@ -34,23 +35,9 @@ class DatabaseWrapper(BaseDatabaseWrapper):
     validation: BaseDatabaseValidation
     validation_class = BaseDatabaseValidation
 
-    operators = {
-        'isnull': '=*',  # will be handled by SQLCompiler._parse_lookup()
-        'exact': '=%s',
-        'contains': '=*%s*',
-        'in': '=*%s*',  # TODO: Make sure CharField__in and ListField__in handle these differently
-        'gt': '>%s',
-        'gte': '>=%s',
-        'lt': '<%s',
-        'lte': '<=%s',
-        'startswith': '=%s*',
-        'endswith': '=*%s',
-        # Most LDAP servers use case-insensitive lookups, anyway, so these are the same as their non-i counterparts
-        'iexact': '=%s',
-        'icontains': '=*%s*',
-        'istartswith': '=%s*',
-        'iendswith': '=*%s',
-    }
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.operators = {name: fmt for name, (fmt, _) in LDAP_OPERATORS.items()}
 
     def _commit(self):
         pass

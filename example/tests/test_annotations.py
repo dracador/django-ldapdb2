@@ -1,10 +1,11 @@
 from collections import namedtuple
 
-from django.db.models import Value
+from django.db.models import Case, Value, When
 from django.db.models.functions import Lower, LTrim, RTrim, Trim, Upper
 
 from example.models import LDAPUser
 from .base import LDAPTestCase
+from .generator import create_random_ldap_user
 
 
 class AnnotationTestCase(LDAPTestCase):
@@ -19,6 +20,7 @@ class AnnotationTestCase(LDAPTestCase):
                 first_name="Annotation",
                 last_name="Test",
                 mail="annotation_test@example.com",
+                description='Annotation Description'
             )
 
     def get_annotation_qs(self):
@@ -53,7 +55,7 @@ class AnnotationTestCase(LDAPTestCase):
         u = self.get_annotation_qs().annotate(upper=Upper('username')).first()
         self.assertEqual(u.upper, u.username.upper())
 
-    def test_trims(self):
+    def test_annotation_trims(self):
         qs = self.get_annotation_qs().annotate(
             trim=Trim('name'),
             ltrim=LTrim('name'),
@@ -63,6 +65,35 @@ class AnnotationTestCase(LDAPTestCase):
         self.assertEqual(obj.trim, 'Annotation  Test')
         self.assertEqual(obj.ltrim, 'Annotation  Test ')
         self.assertEqual(obj.rtrim, ' Annotation  Test')
+
+    def test_annotation_case_when(self):
+        instances = [
+            create_random_ldap_user(description='Annotation Description'),
+            create_random_ldap_user(description='A different Annotation Description'),
+            create_random_ldap_user(description=None),
+        ]
+
+        qs = LDAPUser.objects.filter(username__in=[instance.username for instance in instances]).annotate(
+            test_value=Case(
+                When(
+                    # should match instance 1
+                    description='Annotation Description',
+                    then=Value('description_expected'),
+                ),
+                When(
+                    # should match instance 2
+                    description__isnull=False,
+                    then=Value('description_is_set'),
+                ),
+                # should match instance 3
+                default=Value('description_empty'),
+            )
+        )
+
+        self.assertEqual(
+            sorted(qs.values_list('test_value', flat=True)),
+            sorted(['description_expected', 'description_is_set', 'description_empty'])
+        )
 
     @classmethod
     def tearDownClass(cls):
