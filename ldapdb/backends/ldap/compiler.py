@@ -1,5 +1,5 @@
 import logging
-from typing import TYPE_CHECKING, Any, NamedTuple, cast
+from typing import TYPE_CHECKING, Any, Callable, NamedTuple, cast
 
 import ldap
 from django.db import NotSupportedError
@@ -152,7 +152,12 @@ class SQLCompiler(BaseSQLCompiler):
 
         lookup_type = lookup.lookup_name
 
-        # TODO: Get optional operator from LDAPField
+        render: Callable[[str, str, Any], str | None] | None = getattr(lhs.field, 'render_lookup', None)
+        if callable(render):
+            ldap_filter: str = render(field_name, lookup_type, rhs)
+            if ldap_filter is not None:
+                return ldap_filter
+
         operator_format, _ = LDAP_OPERATORS.get(lookup_type, (None, None))
 
         if lookup_type == 'in':
