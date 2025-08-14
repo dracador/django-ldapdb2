@@ -1,7 +1,7 @@
 import enum
 import re
 from datetime import date, datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 from zoneinfo import ZoneInfo
 
 from django.core.exceptions import FieldError
@@ -19,7 +19,13 @@ class UpdateStrategy(str, enum.Enum):
     REPLACE = 'REPLACE'  # single (MOD_REPLACE)
 
 
-class LDAPField(django_fields.Field):
+@runtime_checkable
+class RenderLookupProtocol(Protocol):
+    def render_lookup(self, field_name: str, lookup_name: str, value: Any) -> str | None:
+        """Convert the value passed to the QuerySet filter to an LDAP filter string."""
+
+
+class LDAPField(django_fields.Field, RenderLookupProtocol):
     binary_field: bool = False
     multi_valued_field: bool = False
     ordering_rule: str | None = None

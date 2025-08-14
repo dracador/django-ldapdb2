@@ -117,8 +117,8 @@ class LDAPTestCase(TestCase):
         self.assertIsNotNone(generated_ldap_search)
         self.assertIsInstance(generated_ldap_search, LDAPSearch)
 
-        # Using .serialize() here allows assertEqual to provide a more detailed error message
-        self.assertEqual(expected_ldap_search.serialize(), generated_ldap_search.serialize())
+        # Using .serialize() here allows for a more detailed error message
+        self.assertDiffDict(generated_ldap_search.serialize(), expected_ldap_search.serialize())
 
     def assertLDAPModelObjectsAreEqual(
         self,
