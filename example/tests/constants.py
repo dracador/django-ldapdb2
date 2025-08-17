@@ -54,7 +54,7 @@ TEST_LDAP_GROUP_1 = LDAPGroup(
         'uid=admin,ou=Users,dc=example,dc=org',
         'uid=user1,ou=Users,dc=example,dc=org',
     ],
-    descriptions=[],
+    descriptions=None,
 )
 
 TEST_LDAP_AVAILABLE_GROUPS = [TEST_LDAP_GROUP_1]

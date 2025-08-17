@@ -1,5 +1,5 @@
 import logging
-from typing import TYPE_CHECKING, Any, Callable, NamedTuple, cast
+from typing import TYPE_CHECKING, Any, NamedTuple, cast
 
 import ldap
 from django.db import NotSupportedError
@@ -27,6 +27,8 @@ except ImportError:
     ROW_COUNT = 'row count'
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from ldap.ldapobject import ReconnectLDAPObject
 
     from .base import DatabaseWrapper
@@ -117,7 +119,6 @@ class SQLCompiler(BaseSQLCompiler):
         The order in which the selected_fields are returned is very important here.
         Otherwise the instanced LDAPModel objects might have the values of their fields swapped.
 
-        TODO: Implement annotations & Related fields
         :return: An ordered list of LDAP attribute names to fetch (including DN, which won't be passed to search call).
         """
         attrlist = []
@@ -168,6 +169,23 @@ class SQLCompiler(BaseSQLCompiler):
         elif lookup_type == 'isnull':
             ldap_filter = f'(!({field_name}=*))' if rhs else f'({field_name}=*)'
             logger.debug("Generated LDAP filter for 'isnull' lookup: %s", ldap_filter)
+            return ldap_filter
+        elif isinstance(rhs, list | tuple):
+            if len(rhs) == 0:
+                # Empty list means no matches; return an always-false filter
+                return '(!(objectClass=*))'
+            if not operator_format:
+                raise NotImplementedError(f'Unsupported lookup type: {lookup_type}')
+            parts = []
+            for v in rhs:
+                escaped_value = escape_ldap_filter_value(v)
+                parts.append(f'({field_name}{operator_format % escaped_value})')
+            ldap_filter = f'(|{"".join(parts)})'
+            logger.debug(
+                "Generated LDAP filter for lookup '%s' with list RHS: %s",
+                lookup_type,
+                ldap_filter,
+            )
             return ldap_filter
         elif operator_format:
             escaped_value = escape_ldap_filter_value(rhs)

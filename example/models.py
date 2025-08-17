@@ -11,6 +11,7 @@ from ldapdb.models.fields import (
     IntegerField,
     MemberField,
     TextField,
+    UpdateStrategy,
 )
 
 
@@ -65,17 +66,22 @@ class LDAPAdminUser(BaseLDAPUser):
         ordering = ('mail',)
 
 
-class LDAPGroup(LDAPModel):
+class BaseLDAPGroup(LDAPModel):
     base_dn = 'ou=Groups,dc=example,dc=org'
     base_filter = '(objectClass=groupOfNames)'
     object_classes = ['groupOfNames']
 
     name = CharField(db_column='cn', primary_key=True)
     org_unit = CharField(db_column='ou')
-    members = MemberField(db_column='member')
+
+    members = MemberField(db_column='member', default='dc=example,dc=org', update_strategy=UpdateStrategy.REPLACE)
 
     # Only for demonstration purposes. In praxis you'd probably not use multiple description attributes.
-    descriptions = CharField(db_column='description', multi_valued_field=True)
+    descriptions = CharField(db_column='description', multi_valued_field=True, blank=True, null=True)
 
     class Meta:
+        abstract = True
         ordering = ('name',)
+
+
+class LDAPGroup(BaseLDAPGroup): ...

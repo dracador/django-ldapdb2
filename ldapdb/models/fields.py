@@ -4,6 +4,7 @@ from datetime import date, datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 from zoneinfo import ZoneInfo
 
+from django.core import checks
 from django.core.exceptions import FieldError
 from django.db.models import Lookup, fields as django_fields
 from django.utils.timezone import is_naive
@@ -26,11 +27,12 @@ class RenderLookupProtocol(Protocol):
 
 
 class LDAPField(django_fields.Field, RenderLookupProtocol):
+    apply_default_on_empty: bool = False
     binary_field: bool = False
     multi_valued_field: bool = False
     ordering_rule: str | None = None
-    update_strategy: UpdateStrategy = UpdateStrategy.REPLACE
     read_only: bool = False
+    update_strategy: UpdateStrategy = UpdateStrategy.REPLACE
 
     def __init__(
         self,
@@ -53,6 +55,10 @@ class LDAPField(django_fields.Field, RenderLookupProtocol):
 
         if not kwargs.get('db_column'):
             raise ValueError(f'{self.__class__.__name__} needs an explicit db_column argument')
+
+        if self.apply_default_on_empty and self.default:
+            self.blank = True
+            self.null = True
 
         if hidden is not None:
             self.hidden = hidden
@@ -91,15 +97,49 @@ class LDAPField(django_fields.Field, RenderLookupProtocol):
         decoded_vals = [v.decode(connection.charset) if isinstance(v, bytes | bytearray) else v for v in value]
         return decoded_vals if self.multi_valued_field else decoded_vals[0]
 
-    def run_validators(self, value):
+    def _check_default(self, **_kwargs):
+        if self.default is None and not self.null:
+            return [
+                checks.Error(
+                    'no default value or null=True specified',
+                    hint=(
+                        'Set a default value or null=True.'
+                        'Make sure your LDAP server allows for nonexistent member attributes'
+                    ),
+                    obj=self,
+                    id='ldapdb.E001',
+                )
+            ]
+        return []
+
+    def check(self, **kwargs):
+        errors = super().check(**kwargs)
+        if self.apply_default_on_empty:
+            errors.extend(self._check_default(**kwargs))
+        return errors
+
+    def clean(self, value, model_instance):
         """
-        Override run_validators to make sure we validate individual values if this is a multi_valued_field.
+        Convert the value's type and run validation. Validation errors
+        from to_python() and validate() are propagated. Return the correct
+        value if no error is raised.
+
+        Override the default clean() method from Django to let validators run on individual values of
+        multi-valued fields.
         """
-        if self.multi_valued_field and isinstance(value, list):
+        value = self.to_python(value)
+        self.validate(value, model_instance)
+
+        # Normalize once for multi-valued fields, then run validators per-element
+        if self.multi_valued_field and not isinstance(value, list | tuple):
+            value = [value]
+
+        if self.multi_valued_field and isinstance(value, list | tuple):
             for v in value:
-                super().run_validators(v)
+                self.run_validators(v)
         else:
-            super().run_validators(value)
+            self.run_validators(value)
+        return value
 
     def get_db_prep_value(self, value: Any, connection: 'DatabaseWrapper', prepared: bool = False):  # noqa: ARG002
         """Prepare a value for DB interaction.
@@ -116,23 +156,30 @@ class LDAPField(django_fields.Field, RenderLookupProtocol):
                     f'Field "{self.name}" (LDAP attribute "{self.db_column}") is read-only and cannot be written.'
                 )
             # Make sure this attribute is not included in write operations
-            return [] if not self.binary_field else []
+            return []
 
         if prepared:
             return value
 
         if value is None:
-            return []
+            values: list[Any] = []
+        else:
+            if self.multi_valued_field and not isinstance(value, list | tuple):
+                value = [value]
+            values = value if self.multi_valued_field else [value]
 
-        values = value if self.multi_valued_field else [value]
         prepared_values = [self.get_prep_value(v) for v in values]
 
-        # Remove duplicates.
-        # https://tools.ietf.org/html/rfc4511#section-4.1.7 :
-        # "The set of attribute values is unordered."
-        # We keep those values sorted in natural order to avoid useless
-        # updates to the LDAP server.
-        return sorted({v for v in prepared_values if v})
+        # Remove duplicates, discard falsy prepared values, sort for stable order.
+        unique_values = sorted({v for v in prepared_values if v})
+
+        # If nothing remains and the field opts in, apply the default (supports str or list defaults)
+        if not unique_values and self.apply_default_on_empty and self.default:
+            default_values = self.default if isinstance(self.default, list | tuple) else [self.default]
+            prepared_defaults = [self.get_prep_value(v) for v in default_values]
+            unique_values = sorted({v for v in prepared_defaults if v})
+
+        return unique_values
 
     def get_db_prep_save(self, value, connection: 'DatabaseWrapper'):
         values = self.get_db_prep_value(value, connection, prepared=False)
@@ -155,9 +202,20 @@ class CharField(django_fields.CharField, LDAPField):
             return None if self.null else ''
         return value
 
+    def to_python(self, value):
+        if value is None:
+            return value
 
-class TextField(CharField):
-    pass  # just the same thing as CharField in LDAP
+        if self.multi_valued_field:
+            # Only return a list if the input is already a list/tuple
+            if isinstance(value, list | tuple):
+                return [str(v) for v in value]
+            # For scalar inputs, return a scalar to avoid nested lists during DB prep
+            return str(value)
+        return str(value)
+
+
+TextField = CharField
 
 
 class DistinguishedNameField(CharField):
@@ -218,8 +276,23 @@ class IntegerField(django_fields.IntegerField, LDAPField):
 
 
 class MemberField(DistinguishedNameField):
+    # TODO: Maybe allow setting a QuerySet as a default?
     multi_valued_field = True
     update_strategy = UpdateStrategy.ADD_DELETE
+    apply_default_on_empty = True
+
+    # No custom get_db_prep_value needed; base class handles defaults.
+    def from_db_value(self, value, expression, connection):
+        """Convert DB value to Python value, filtering out placeholder values."""
+        value = super().from_db_value(value, expression, connection)
+        # Make defaults a list safely even if default is falsy/None
+        if isinstance(self.default, list | tuple):
+            defaults: list[str] = list(self.default)
+        elif self.default:
+            defaults = [self.default]
+        else:
+            defaults = []
+        return [member for member in value if member not in defaults]
 
 
 _GTIME_RE = re.compile(
