@@ -8,8 +8,6 @@ from example.tests.base import LDAPTestCase
 from example.tests.constants import TEST_LDAP_GROUP_1
 from example.tests.generator import create_random_ldap_group, generate_random_group_name
 
-# TODO: Model with MemberField(null=True)
-
 
 class LDAPGroupWithAddDeleteStrategyMemberField(BaseLDAPGroup):
     members = MemberField(db_column='member', default='dc=example,dc=org', update_strategy=UpdateStrategy.ADD_DELETE)
@@ -88,21 +86,17 @@ class MemberFieldTestCase(LDAPTestCase):
         self.assertIn('Invalid distinguished name', str(e.exception))
 
     def test_update_group_members_add_update_strategy(self):
-        # TODO: Fix ADD_DELETE strategy with lists
-
-        """
-        new_members = ['uid=user2,ou=Users,dc=example,dc=org']
         instance = create_random_ldap_group(
             model_cls=LDAPGroupWithAddDeleteStrategyMemberField,
             members=[
                 self.user_1.dn,
             ],
         )
+        new_members = ['uid=user2,ou=Users,dc=example,dc=org']
         instance.members = new_members
         instance.save()
         instance.refresh_from_db()
         self.assertEqual(instance.members, new_members)
-        """
 
     def test_update_group_members_replace_strategy(self):
         new_members = ['uid=user2,ou=Users,dc=example,dc=org']

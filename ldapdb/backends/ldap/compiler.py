@@ -361,8 +361,12 @@ class SQLUpdateCompiler(compiler.SQLUpdateCompiler, SQLCompiler):
                     getattr(field, 'update_strategy', UpdateStrategy.REPLACE) == UpdateStrategy.ADD_DELETE
                     and field.multi_valued_field
                 ):
-                    mod.delete(attr)
-                    mod.add(attr, new_vals)
+                    to_add = set(new_vals) - set(old_vals)
+                    to_delete = set(old_vals) - set(new_vals)
+                    if to_add:
+                        mod.add(attr, to_add)
+                    if to_delete:
+                        mod.delete(attr, to_delete)
                 else:
                     mod.replace(attr, new_vals)
 

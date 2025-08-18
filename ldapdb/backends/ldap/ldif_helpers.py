@@ -1,12 +1,6 @@
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 
 import ldap
-
-
-def diff_multi(current: list[bytes], desired: list[bytes]):
-    cur = set(current)
-    des = set(desired)
-    return sorted(des - cur), sorted(cur - des)
 
 
 class LDAPRequest(dict):
@@ -34,18 +28,25 @@ class AddRequest(LDAPRequest):
 
 
 class ModifyRequest(LDAPRequest):
-    def add(self, attr, values):
-        op, lst = self.setdefault(attr, (ldap.MOD_ADD, []))
-        lst.extend(self.get_encoded_values(values))
+    def add(self, attr: str, values: Iterable[bytes | str]):
+        lst = self.setdefault(attr, [])
+        vals = self.get_encoded_values(values or [])
+        lst.extend((ldap.MOD_ADD, val) for val in vals)
 
     def replace(self, attr, values):
-        self[attr] = (ldap.MOD_REPLACE, list(self.get_encoded_values(values)))
+        self[attr] = [(ldap.MOD_REPLACE, list(self.get_encoded_values(values)))]
 
-    def delete(self, attr):
-        self[attr] = (ldap.MOD_DELETE, [])
+    def delete(self, attr, values: Iterable | None = None):
+        lst = self.setdefault(attr, [])
+        vals = self.get_encoded_values(values or [])
+        lst.extend((ldap.MOD_DELETE, val) for val in vals)
 
     def as_modlist(self):
-        return [(op, attr, vals) for attr, (op, vals) in self.items()]
+        modlist = ()
+        for attr, mods in self.items():
+            for mod in mods:
+                modlist += ((mod[0], attr, mod[1]),)
+        return modlist
 
     def __str__(self):
         lines = []
