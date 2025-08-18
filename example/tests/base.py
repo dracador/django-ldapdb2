@@ -48,6 +48,7 @@ def queryset_to_ldap_search(queryset: QuerySet) -> LDAPSearch:
 
 
 def get_new_ldap_search(
+    model_cls=LDAPUser,
     base: str = 'ou=Users,dc=example,dc=org',
     filterstr: str | None = None,
     attrlist: list[str] | None = None,
@@ -57,15 +58,15 @@ def get_new_ldap_search(
     offset: int = 0,
     ignore_base_filter: bool = False,
 ):
-    base_filter = LDAPUser.base_filter
+    base_filter = model_cls.base_filter
     if base_filter and not ignore_base_filter:
         filterstr = f'(&{base_filter}{filterstr})' if filterstr else base_filter
 
     return LDAPSearch(
-        attrlist=attrlist or [field.column for field in LDAPUser._meta.get_fields()],
+        attrlist=attrlist or [field.column for field in model_cls._meta.get_fields()],
         base=base,
         control_type=LDAPSearchControlType.SSSVLV,
-        filterstr=filterstr or LDAPUser.base_filter,
+        filterstr=filterstr or model_cls.base_filter,
         limit=limit,
         offset=offset,
         ordering_rules=ordering_rules or [('uid', 'caseIgnoreOrderingMatch')],  # Default to pk field for SSSVLV
