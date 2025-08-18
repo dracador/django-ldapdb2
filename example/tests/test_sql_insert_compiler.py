@@ -1,3 +1,5 @@
+from random import choice
+
 from django.core.exceptions import FieldError
 from django.db import DatabaseError, IntegrityError, transaction
 
@@ -98,7 +100,7 @@ class SQLInsertUpdateCompilerTestCase(LDAPTestCase):
             self.assertEqual(instance.dn, instance.entry_dn)
 
     def test_escaped_characters_in_dn(self):
-        username = '*kläüß?gonzález*'
+        username = f'*kläüß?gonzález*-{choice(range(1000))}'
         user = create_random_ldap_user(username=username)
         user.refresh_from_db()
         self.assertEqual(user.username, username)
