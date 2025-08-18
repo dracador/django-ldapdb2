@@ -72,8 +72,6 @@ class LDAPField(django_fields.Field, RenderLookupProtocol):
         if update_strategy is not None:
             self.update_strategy = update_strategy
 
-        # If read_only not explicitly provided, infer it from editable=False
-        # (Django's editable=False affects forms/admin only. Let's keep this behaviour as-is).
         if read_only:
             self.blank = True
             self.null = True
