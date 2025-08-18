@@ -84,4 +84,5 @@ class BaseLDAPGroup(LDAPModel):
         ordering = ('name',)
 
 
-class LDAPGroup(BaseLDAPGroup): ...
+class LDAPGroup(BaseLDAPGroup):
+    ...

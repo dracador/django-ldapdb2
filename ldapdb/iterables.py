@@ -178,7 +178,5 @@ class LDAPNamedValuesListIterable(LDAPBaseIterable, NamedValuesListIterable):
         return data
 
     def _dict_to_output(self, row_dict: dict, columns: list[str]) -> 'namedtuple':
-        from collections import namedtuple
-
         NamedRow = namedtuple('Row', columns)
         return NamedRow(*(row_dict[col] for col in columns))
