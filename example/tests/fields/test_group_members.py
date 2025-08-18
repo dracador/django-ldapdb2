@@ -1,5 +1,3 @@
-from collections.abc import Sequence
-
 import ldap
 from django.core.exceptions import ValidationError
 from django.db import connections
@@ -11,82 +9,6 @@ from example.tests.constants import TEST_LDAP_GROUP_1
 from example.tests.generator import create_random_ldap_group, generate_random_group_name
 
 # TODO: Model with MemberField(null=True)
-
-
-class LDAPRequest:
-    charset: str = 'utf-8'  # default
-
-    def get_encoded_values(self, values: Sequence[bytes | str]) -> list[bytes]:
-        return [v.encode(self.charset) if isinstance(v, str) else v for v in values]
-
-
-class AddRequest(LDAPRequest):
-    def __init__(self):
-        self._items: list[tuple[str, list[bytes]]] = []
-
-    def add(self, name: str, raw_values: Sequence[bytes | str]):
-        vals: list[bytes] = self.get_encoded_values(raw_values)
-        if vals:
-            self._items.append((name, vals))
-
-    def as_modlist(self):
-        return list(self._items)
-
-    def __bool__(self):
-        return bool(self._items)
-
-    def __iter__(self):
-        return iter(self._items)
-
-    def items(self):
-        return list(self._items)
-
-    def __str__(self):
-        lines = []
-        for attr, vals in self._items:
-            for v in vals:
-                lines.append(f'{attr}: {v!r}')
-        return '\n'.join(lines)
-
-
-class ModifyRequest(LDAPRequest):
-    def __init__(self):
-        self._ops: list[tuple[int, str, list[bytes]]] = []
-
-    def add(self, attr: str, values: Sequence[bytes | str]):
-        vals = self.get_encoded_values(values)
-        if not vals:
-            return
-        self._ops.append((ldap.MOD_ADD, attr, vals))
-
-    def replace(self, attr: str, values: Sequence[bytes | str]):
-        vals = self.get_encoded_values(values)
-        self._ops.append((ldap.MOD_REPLACE, attr, vals))
-
-    def delete(self, attr: str, values: Sequence[bytes | str] | None = None):
-        vals = [] if values is None else self.get_encoded_values(values)
-        self._ops.append((ldap.MOD_DELETE, attr, vals))
-
-    def as_modlist(self):
-        return list(self._ops)
-
-    def __bool__(self):
-        return bool(self._ops)
-
-    def __str__(self):
-        lines = []
-        for op, attr, vals in self._ops:
-            op_name = {
-                ldap.MOD_ADD: 'ADD',
-                ldap.MOD_DELETE: 'DELETE',
-                ldap.MOD_REPLACE: 'REPLACE',
-            }.get(op, str(op))
-            if not vals:
-                lines.append(f'{op_name} {attr}')
-            else:
-                for v in vals:
-                    lines.append(f'{op_name} {attr}: {v!r}')
-        return '\n'.join(lines)
 
 
 class LDAPGroupWithAddDeleteStrategyMemberField(BaseLDAPGroup):
