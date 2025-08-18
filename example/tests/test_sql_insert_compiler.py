@@ -96,3 +96,10 @@ class SQLInsertUpdateCompilerTestCase(LDAPTestCase):
             queryset.update(entry_dn='uid=new-uuid-value,ou=Users,dc=smhss,dc=de')
             instance.refresh_from_db()
             self.assertEqual(instance.dn, instance.entry_dn)
+
+    def test_escaped_characters_in_dn(self):
+        username = '*kläüß?gonzález*'
+        user = create_random_ldap_user(username=username)
+        user.refresh_from_db()
+        self.assertEqual(user.username, username)
+        self.assertEqual(user.dn, f'uid={username},ou=Users,dc=example,dc=org')
