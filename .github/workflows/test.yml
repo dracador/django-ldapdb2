@@ -26,9 +26,19 @@ jobs:
         python-version: ${{ matrix.python-version }}
         cache: pip
 
+    - name: Cache uv and tox
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/uv
+          .tox
+        key: ${{ runner.os }}-py${{ matrix.python-version }}-uv-tox-${{ hashFiles('**/tox.ini', '**/pyproject.toml', '**/poetry.lock', '**/requirements*.txt', '**/setup.cfg', '**/setup.py') }}
+        restore-keys: |
+          ${{ runner.os }}-py${{ matrix.python-version }}-uv-tox-
+
     - name: Install Dependencies
       run: |
-        python -m pip install tox-gh
+        python -m pip install uv tox-uv tox-gh
 
     - name: Run Tests
       run: tox
