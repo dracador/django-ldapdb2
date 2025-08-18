@@ -148,7 +148,10 @@ class LDAPField(django_fields.Field, RenderLookupProtocol):
         """
 
         if self.read_only:
-            has_value = bool(value) and value != [] if self.multi_valued_field else value not in (None, '', b'')
+            if self.multi_valued_field:
+                has_value = value not in (None, []) and bool(value)
+            else:
+                has_value = value not in (None, b'') if self.binary_field else value not in (None, '')
             if has_value:
                 raise FieldError(
                     f'Field "{self.name}" (LDAP attribute "{self.db_column}") is read-only and cannot be written.'
