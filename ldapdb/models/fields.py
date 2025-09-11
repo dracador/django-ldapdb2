@@ -1,7 +1,7 @@
 import enum
 import re
 from datetime import date, datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 from zoneinfo import ZoneInfo
 
 from django.core import checks
@@ -10,9 +10,6 @@ from django.db.models import Lookup, fields as django_fields
 from django.utils.timezone import is_naive
 
 from ldapdb.validators import validate_dn
-
-if TYPE_CHECKING:
-    from ldapdb.backends.ldap.base import DatabaseWrapper
 
 
 class UpdateStrategy(str, enum.Enum):
@@ -221,18 +218,15 @@ TextField = CharField
 
 
 class DistinguishedNameField(CharField):
+    _allowed_lookups = {'exact', 'iexact', 'in', 'isnull'}
     default_validators = [validate_dn]
-
-
-class PrimaryDistinguishedNameField(DistinguishedNameField):
-    _allowed_lookups = {'exact', 'iexact'}
 
     def get_lookup(self, lookup_name: str) -> Lookup:
         if lookup_name not in self._allowed_lookups:
             raise FieldError(
                 f'Lookup {lookup_name} is not supported for DN fields. '
-                'Either use an exact lookup filter(dn=...), '
-                'iterate over the list yourself or add another field for something like openLDAPs entryDN attribute'
+                f'Either use an exact lookup filter({self.db_column}=...), '
+                'or iterate over the results yourself.'
             )
         return super().get_lookup(lookup_name)
 
