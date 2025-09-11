@@ -1,7 +1,7 @@
 import enum
 import re
 from datetime import date, datetime, timedelta, timezone
-from typing import Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 from zoneinfo import ZoneInfo
 
 from django.core import checks
@@ -10,6 +10,9 @@ from django.db.models import Lookup, fields as django_fields
 from django.utils.timezone import is_naive
 
 from ldapdb.validators import validate_dn
+
+if TYPE_CHECKING:
+    from ldapdb.backends.ldap.base import DatabaseWrapper
 
 
 class UpdateStrategy(str, enum.Enum):
@@ -146,14 +149,6 @@ class LDAPField(django_fields.Field, RenderLookupProtocol):
         """
 
         if self.read_only:
-            if self.multi_valued_field:
-                has_value = value not in (None, []) and bool(value)
-            else:
-                has_value = value not in (None, b'') if self.binary_field else value not in (None, '')
-            if has_value:
-                raise FieldError(
-                    f'Field "{self.name}" (LDAP attribute "{self.db_column}") is read-only and cannot be written.'
-                )
             # Make sure this attribute is not included in write operations
             return []
 
