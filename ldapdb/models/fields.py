@@ -74,6 +74,7 @@ class LDAPField(django_fields.Field, RenderLookupProtocol):
 
         if read_only:
             self.blank = True
+            self.editable = False
             self.null = True
             self.read_only = read_only
 

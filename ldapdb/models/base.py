@@ -73,7 +73,7 @@ class LDAPModel(django_models.Model):
 
     objects = LDAPQuerySet.as_manager()
 
-    dn = DistinguishedNameField(db_column='dn', unique=True, editable=False, hidden=True)
+    dn = DistinguishedNameField(db_column='dn', unique=True, read_only=True, hidden=True)
 
     class Meta:
         abstract = True
