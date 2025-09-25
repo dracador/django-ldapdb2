@@ -31,6 +31,13 @@ class LDAPQuery(Query):
         self.annotation_aliases: list = []
         self.ldap_search: LDAPSearch | None = None
 
+    def __str__(self) -> str:
+        """
+        Normal __str__ method calls self.sql_with_params(),
+        which is not compatible with LDAP.
+        """
+        return self.ldap_search.filterstr
+
 
 class LDAPQuerySet(QuerySet):
     query: LDAPQuery
