@@ -1,7 +1,6 @@
 from random import choice
 
-from django.core.exceptions import FieldError
-from django.db import DatabaseError, IntegrityError, transaction
+from django.db import DatabaseError, IntegrityError
 
 from example.models import LDAPUser
 from example.tests.base import LDAPTestCase
