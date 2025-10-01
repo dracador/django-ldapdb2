@@ -10,7 +10,7 @@ from django.db.models.lookups import Exact, In
 from django.db.models.sql import compiler
 from django.db.models.sql.compiler import PositionRef, SQLCompiler as BaseSQLCompiler
 from django.db.models.sql.constants import CURSOR, GET_ITERATOR_CHUNK_SIZE, MULTI
-from django.db.models.sql.where import WhereNode
+from django.db.models.sql.where import NothingNode, WhereNode
 
 from ldapdb.exceptions import LDAPModelTypeError
 from ldapdb.models import LDAPModel, LDAPQuery
@@ -212,6 +212,8 @@ class SQLCompiler(BaseSQLCompiler):
             elif isinstance(child, Lookup):
                 subfilter = self._parse_lookup(child)
                 subfilters.append(subfilter)
+            elif isinstance(child, NothingNode):
+                subfilters.append('(!(objectClass=*))')
             else:
                 raise TypeError(f'Unsupported child type: {type(child)}')
 

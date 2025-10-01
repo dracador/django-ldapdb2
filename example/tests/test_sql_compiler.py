@@ -58,6 +58,11 @@ class SQLCompilerTestCase(LDAPTestCase):
         expected_ldap_search = get_new_ldap_search()
         self.assertLDAPSearchIsEqual(queryset, expected_ldap_search)
 
+    def test_queryset_none(self):
+        obj = self._get_user_1_object()
+        self.assertFalse(obj in LDAPUser.objects.none())
+        self.assertFalse(bool(LDAPUser.objects.none().values()))
+
     def test_ldapuser_get(self):
         obj = self._get_user_1_object()
         self.assertLDAPModelObjectsAreEqual(TEST_LDAP_USER_1, obj)
