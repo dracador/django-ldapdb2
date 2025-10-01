@@ -318,7 +318,7 @@ class SQLCompiler(BaseSQLCompiler):
 
 class SQLUpdateCompiler(compiler.SQLUpdateCompiler, SQLCompiler):
     def execute_sql(self, returning_fields=None):  # noqa: ARG002 - don't need returning_fields, we just force another search
-        model = cast('LDAPModel', self.query.model)
+        model = cast('LDAPModel', cast('object', self.query.model))
         db = cast('DatabaseWrapper', self.connection)
         ldap_conn = self._get_ldap_conn()
         charset = db.charset
@@ -393,15 +393,15 @@ class SQLInsertCompiler(compiler.SQLInsertCompiler, SQLCompiler):
         if len(self.query.objs) != 1:
             raise NotSupportedError('bulk_insert() not implemented yet')
 
-        obj = self.query.objs[0]
-        model = cast('LDAPModel', self.query.model)
+        obj = cast('LDAPModel', self.query.objs[0])
+        model = cast('LDAPModel', cast('object', self.query.model))
         db = cast('DatabaseWrapper', self.connection)
         ldap_conn = self._get_ldap_conn()
 
         # build DN
         pk_field = model._meta.pk
         rdn_val = getattr(obj, pk_field.attname)
-        dn = f'{pk_field.column}={rdn_val},{model.base_dn}'
+        obj.dn = obj.build_dn(rdn_val)
 
         add = AddRequest()
         add.charset = db.charset
@@ -421,11 +421,11 @@ class SQLInsertCompiler(compiler.SQLInsertCompiler, SQLCompiler):
 
             add.add(field.column, prep)
 
-        logger.debug('LDAP add request for %s\n%s', dn, add)
+        logger.debug('LDAP add request for %s\n%s', obj.dn, add)
 
         with self.connection.wrap_database_errors:
             # make sure any exceptions bubble up as proper Django errors
-            ldap_conn.add_s(dn, add.as_modlist())
+            ldap_conn.add_s(obj.dn, add.as_modlist())
 
         return []  # Django does not care about the return value of execute_sql() for INSERTs
 
@@ -438,7 +438,7 @@ class SQLDeleteCompiler(compiler.SQLDeleteCompiler, SQLCompiler):
         result_type=MULTI,
         **_kwargs,
     ):
-        model = cast('LDAPModel', self.query.model)
+        model = cast('LDAPModel', cast('object', self.query.model))
         ldap_conn = self._get_ldap_conn()
 
         pk_val = self._pk_value_from_where()

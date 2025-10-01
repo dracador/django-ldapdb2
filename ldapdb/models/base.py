@@ -118,3 +118,8 @@ class LDAPModel(django_models.Model):
                     f'Cannot subclass non-abstract model "{base.__name__}" in "{cls.__name__}". '
                     'Only abstract models can be subclassed in this LDAP backend.'
                 )
+
+    @classmethod
+    def build_dn(cls, rdn_value):
+        pk_field = cls._meta.pk
+        return f"{pk_field.column}={rdn_value},{cls.base_dn}"

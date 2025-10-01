@@ -27,6 +27,12 @@ class SQLInsertUpdateCompilerTestCase(LDAPTestCase):
         user = LDAPUser.objects.get(username=created_user.username)
         self.assertEqual(user.username, created_user.username, "User's username should match the created value.")
 
+    def test_early_dn_after_creation(self):
+        user = create_random_ldap_user(do_not_create=True)
+        user.full_clean()
+        user.save()
+        self.assertIsNotNone(user.dn, "User's DN should be set after creation.")
+
     def test_create_user_via_save(self):
         # Creating via .save() will use the SQLUpdateCompiler instead of SQLInsertCompiler initially.
         # Letting the SQLUpdateCompiler return 0 will move the handling over to the SQLInsertCompiler.
