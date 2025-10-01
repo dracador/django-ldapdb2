@@ -5,7 +5,7 @@ from django.db import DatabaseError, IntegrityError
 from example.models import LDAPUser
 from example.tests.base import LDAPTestCase
 from example.tests.constants import TEST_LDAP_USER_1, THUMBNAIL_PHOTO_BYTES
-from example.tests.generator import create_random_ldap_user
+from example.tests.generator import create_random_ldap_user, generate_random_username
 
 
 class SQLInsertUpdateCompilerTestCase(LDAPTestCase):
@@ -57,6 +57,16 @@ class SQLInsertUpdateCompilerTestCase(LDAPTestCase):
         non_created_user = create_random_ldap_user(do_not_create=True)
         with self.assertRaises(DatabaseError):
             non_created_user.save(force_update=True)
+
+    def test_update_user_primary_field(self):
+        old_username = generate_random_username()
+        new_username = generate_random_username()
+        obj = create_random_ldap_user(username=old_username)
+        obj.username = new_username
+        obj.save()
+        obj.refresh_from_db()
+        self.assertFalse(LDAPUser.objects.filter(username=old_username).exists())
+        self.assertEqual(obj.dn, f'uid={new_username},{LDAPUser.base_dn}')
 
     def test_update_user_non_primary_field(self):
         new_mail = 'aftervaluechange@example.com'

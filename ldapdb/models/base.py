@@ -1,7 +1,7 @@
 from typing import TYPE_CHECKING
 
 import ldap
-from django.db import models as django_models
+from django.db import DEFAULT_DB_ALIAS, NotSupportedError, connections, models as django_models
 from django.db.models import QuerySet
 from django.db.models.sql import Query
 
@@ -47,6 +47,15 @@ class LDAPQuerySet(QuerySet):
             query = LDAPQuery(model)
         super().__init__(model=model, query=query, using=using, hints=hints)
         self._iterable_class = LDAPModelIterable
+
+    def update(self, **kwargs):
+        pk_name = self.model._meta.pk.attname
+        if pk_name in kwargs:
+            raise NotSupportedError(
+                'Updating the primary key requires an LDAP rename. '
+                'Assign the field on the instance and call .save() to rename entries, instead.'
+            )
+        return super().update(**kwargs)
 
     def values(self, *fields, **expressions):
         qs = super().values(*fields, **expressions)
@@ -96,6 +105,26 @@ class LDAPModel(django_models.Model):
         cls._check_non_abstract_inheritance()
         cls._check_required_attrs()
 
+    def save(self, *args, **kwargs):
+        """
+        If the PK (RDN) changed, perform an LDAP rename first,
+        then proceed with Django's normal save/update.
+        """
+        using = kwargs.get('using') or self._state.db or DEFAULT_DB_ALIAS
+
+        if not self._state.adding and getattr(self, 'dn', None):
+            old_dn = self.dn
+            new_dn = self._desired_dn()
+            if new_dn != old_dn:
+                new_rdn = new_dn.split(',', 1)[0]
+                conn = connections[using]
+                with conn.wrap_database_errors, conn.cursor() as cursor:
+                    ldap_conn = cursor.db.connection
+                    ldap_conn.rename_s(old_dn, new_rdn)
+                self.dn = new_dn
+
+        return super().save(*args, **kwargs)
+
     @classmethod
     def _check_required_attrs(cls):
         if not cls._meta.abstract:
@@ -120,6 +149,15 @@ class LDAPModel(django_models.Model):
                 )
 
     @classmethod
-    def build_dn(cls, rdn_value):
+    def build_rdn(cls, rdn_value):
         pk_field = cls._meta.pk
-        return f"{pk_field.column}={rdn_value},{cls.base_dn}"
+        return f'{pk_field.column}={rdn_value}'
+
+    @classmethod
+    def build_dn(cls, rdn_value):
+        return f'{cls.build_rdn(rdn_value)},{cls.base_dn}'
+
+    def _desired_dn(self):
+        pk_field = self._meta.pk
+        rdn_val = getattr(self, pk_field.attname)
+        return self.build_dn(rdn_val)

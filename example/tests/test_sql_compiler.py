@@ -44,9 +44,6 @@ class SQLCompilerTestCase(LDAPTestCase):
 
     --- Deferred fields ---
     LDAPUser.objects.defer('cn').get(uid='test').cn
-
-    --- Renaming ---
-    u = LDAPUser.objects.get(uid='test'); u.uid = 'test_renamed'; u.save()
     """
 
     def test_ldapgroup_get(self):

@@ -324,7 +324,7 @@ class SQLUpdateCompiler(compiler.SQLUpdateCompiler, SQLCompiler):
         charset = db.charset
 
         pk_val = self._pk_value_from_where()
-        dn = f'{model._meta.pk.column}={pk_val},{model.base_dn}'
+        dn = model.build_dn(pk_val)
 
         with db.wrap_database_errors:
             try:
@@ -442,7 +442,7 @@ class SQLDeleteCompiler(compiler.SQLDeleteCompiler, SQLCompiler):
         ldap_conn = self._get_ldap_conn()
 
         pk_val = self._pk_value_from_where()
-        dn = f'{model._meta.pk.column}={pk_val},{model.base_dn}'
+        dn = model.build_dn(pk_val)
 
         logger.debug('LDAP delete request for %s', dn)
 
