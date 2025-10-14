@@ -3,7 +3,7 @@ name = "django-ldapdb2"
 version = "0.1.0"
 description = "LDAP database backend for Django - loosely based on django-ldapdb"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 dependencies = [
     "Django>=4.2",           # https://docs.djangoproject.com/en/stable/releases/
     "python-ldap>=3.3",      # https://github.com/python-ldap/python-ldap/releases
@@ -22,7 +22,7 @@ dev = [
 #
 [tool.ruff]
 src = ["ldapdb"]
-target-version = "py311"
+target-version = "py312"
 line-length = 120
 indent-width = 4
 
