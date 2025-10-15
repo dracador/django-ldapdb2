@@ -6,7 +6,7 @@ import ldap
 class LDAPRequest(dict):
     charset: str = 'utf-8'  # default
 
-    def get_encoded_values(self, values: Sequence[bytes | str]) -> list[bytes]:
+    def get_encoded_values(self, values: Iterable[bytes | str]) -> list[bytes]:
         return [v.encode(self.charset) if isinstance(v, str) else v for v in values]
 
 
@@ -38,7 +38,11 @@ class ModifyRequest(LDAPRequest):
 
     def delete(self, attr, values: Iterable | None = None):
         lst = self.setdefault(attr, [])
-        vals = self.get_encoded_values(values or [])
+        if values is None:
+            self[attr] = [(ldap.MOD_DELETE, None)]
+            return
+
+        vals = self.get_encoded_values(values)
         lst.extend((ldap.MOD_DELETE, val) for val in vals)
 
     def as_modlist(self):

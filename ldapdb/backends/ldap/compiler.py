@@ -354,25 +354,26 @@ class SQLUpdateCompiler(compiler.SQLUpdateCompiler, SQLCompiler):
             if old_vals == new_vals:
                 continue
 
+            use_add_delete = (
+                getattr(field, 'update_strategy', UpdateStrategy.REPLACE) == UpdateStrategy.ADD_DELETE
+                and field.multi_valued_field
+            )
+
             if not new_vals:
                 mod.delete(attr)
             elif not old_vals:
                 mod.add(attr, new_vals)
+            elif use_add_delete:
+                to_add = set(new_vals) - set(old_vals)
+                to_delete = set(old_vals) - set(new_vals)
+                if to_add:
+                    mod.add(attr, to_add)
+                if to_delete:
+                    mod.delete(attr, to_delete)
             else:
-                if (
-                    getattr(field, 'update_strategy', UpdateStrategy.REPLACE) == UpdateStrategy.ADD_DELETE
-                    and field.multi_valued_field
-                ):
-                    to_add = set(new_vals) - set(old_vals)
-                    to_delete = set(old_vals) - set(new_vals)
-                    if to_add:
-                        mod.add(attr, to_add)
-                    if to_delete:
-                        mod.delete(attr, to_delete)
-                else:
-                    mod.replace(attr, new_vals)
+                mod.replace(attr, new_vals)
 
-        if not mod:
+        if not mod.as_modlist():
             logger.debug('No changes after diff for %s — skipping modify_s().', dn)
             return 1
 

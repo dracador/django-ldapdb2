@@ -1,7 +1,7 @@
 import ldap
 from django.core.exceptions import ValidationError
 from django.db import connections
-from ldapdb.models.fields import MemberField, UpdateStrategy
+from ldapdb.models.fields import DistinguishedNameField, MemberField, UpdateStrategy
 
 from example.models import BaseLDAPGroup, LDAPGroup, LDAPUser
 from example.tests.base import LDAPTestCase
@@ -15,6 +15,20 @@ class LDAPGroupWithAddDeleteStrategyMemberField(BaseLDAPGroup):
 
 class LDAPGroupWithReplaceStrategyMemberField(BaseLDAPGroup):
     members = MemberField(db_column='member', default='dc=example,dc=org', update_strategy=UpdateStrategy.REPLACE)
+
+
+class LDAPGroupWithCustomMembersFieldAddDelete(BaseLDAPGroup):
+    object_classes = ['groupOfNames', 'x-extendedGroup']
+    custom_members = DistinguishedNameField(
+        db_column='x-group-customMember', update_strategy=UpdateStrategy.ADD_DELETE, multi_valued_field=True
+    )
+
+
+class LDAPGroupWithCustomMembersFieldReplace(BaseLDAPGroup):
+    object_classes = ['groupOfNames', 'x-extendedGroup']
+    custom_members = DistinguishedNameField(
+        db_column='x-group-customMember', update_strategy=UpdateStrategy.REPLACE, multi_valued_field=True
+    )
 
 
 class MemberFieldTestCase(LDAPTestCase):
@@ -53,7 +67,6 @@ class MemberFieldTestCase(LDAPTestCase):
         )
         instance.full_clean()
         instance.save()
-        instance.refresh_from_db()  # TODO: Currently need to run refresh_from_db() to get the dn attribute
         with connections[instance._state.db].cursor() as cursor:
             result = cursor.connection.search_s(
                 base=instance.dn,
@@ -110,3 +123,43 @@ class MemberFieldTestCase(LDAPTestCase):
         instance.save()
         instance.refresh_from_db()
         self.assertEqual(instance.members, new_members)
+
+    def test_remove_custom_member_from_groups_add_delete(self):
+        # noinspection PyTypeChecker
+        instance: LDAPGroupWithCustomMembersFieldAddDelete = create_random_ldap_group(
+            model_cls=LDAPGroupWithCustomMembersFieldAddDelete,
+            do_not_create=True,
+            custom_members=[
+                self.user_1.dn,
+            ],
+        )
+        instance.full_clean()
+        instance.save()
+        instance.refresh_from_db()
+        instance.custom_members.remove(self.user_1.dn)
+        instance.save(update_fields=['custom_members'])
+        instance.refresh_from_db()
+        self.assertEqual(
+            instance.custom_members,
+            [],
+        )
+
+    def test_remove_custom_member_from_groups_replace(self):
+        # noinspection PyTypeChecker
+        instance: LDAPGroupWithCustomMembersFieldReplace = create_random_ldap_group(
+            model_cls=LDAPGroupWithCustomMembersFieldReplace,
+            do_not_create=True,
+            custom_members=[
+                self.user_1.dn,
+            ],
+        )
+        instance.full_clean()
+        instance.save()
+        instance.refresh_from_db()
+        instance.custom_members.remove(self.user_1.dn)
+        instance.save(update_fields=['custom_members'])
+        instance.refresh_from_db()
+        self.assertEqual(
+            instance.custom_members,
+            [],
+        )
