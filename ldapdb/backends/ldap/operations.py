@@ -1,8 +1,9 @@
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from django.db.backends.base.operations import BaseDatabaseOperations
 
 if TYPE_CHECKING:
+    from ldapdb.models import LDAPQuery
     from .base import DatabaseWrapper
 
 
@@ -18,7 +19,7 @@ class DatabaseOperations(BaseDatabaseOperations):
             if value is None:
                 return value
 
-            if not getattr(field, "multi_valued_field", False) and isinstance(value, list | tuple):
+            if not getattr(field, 'multi_valued_field', False) and isinstance(value, list | tuple):
                 value = value[0]
 
             if isinstance(value, bytes | bytearray):
@@ -26,7 +27,7 @@ class DatabaseOperations(BaseDatabaseOperations):
 
             return value
 
-        if not getattr(field, "binary_field", False):
+        if not getattr(field, 'binary_field', False):
             converters.append(_unwrap_and_decode)
         return converters
 
@@ -41,6 +42,9 @@ class DatabaseOperations(BaseDatabaseOperations):
         # LDAP does not support limiting query results in the query itself.
         # Would need to be done via PAGE_SIZE database setting
         return None
+
+    def last_executed_query(self, cursor: Any, sql: 'LDAPQuery', params: Any) -> str:  # noqa: ARG002
+        return str(sql)
 
     # We *could* implement the following methods, but they are not necessary for the LDAP backend
     def date_extract_sql(self, lookup_type, field_name, **kwargs):

@@ -36,7 +36,7 @@ class LDAPQuery(Query):
         Normal __str__ method calls self.sql_with_params(),
         which is not compatible with LDAP.
         """
-        return self.ldap_search.filterstr
+        return f'{self.__class__}.ldap_search: {self.ldap_search.serialize()}'
 
 
 class LDAPQuerySet(QuerySet):
