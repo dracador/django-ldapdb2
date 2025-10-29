@@ -273,24 +273,36 @@ class SQLCompiler(BaseSQLCompiler):
         return ordering_rules
 
     def _build_ldap_search(self, with_limits):
-        ordering_rules = self._compile_order_by()
+        attrlist = self._compile_select()
+        control_type = LDAPSearchControlType.NO_CONTROL
+        limit = 0
+        ordering_rules = None
+
+        if attrlist:
+            ordering_rules = self._compile_order_by()
+            if self.connection.features.supports_sssvlv and ordering_rules:
+                control_type = LDAPSearchControlType.SSSVLV
+            elif self.connection.features.supports_simple_paged_results:
+                control_type = LDAPSearchControlType.SIMPLE_PAGED_RESULTS
+
+            if with_limits and self.query.high_mark:
+                limit = self.query.high_mark - self.query.low_mark
+        else:
+            # tell LDAP server to return no attributes at all,
+            # otherwise the server itself will default to all attributes (["*"]).
+            # This speeds up queries like .count() significantly.
+            attrlist = ['1.1']
+
         ldap_search = LDAPSearch(
             base=self.query.model.base_dn,
             scope=self.query.model.search_scope,
-            attrlist=self._compile_select(),
+            attrlist=attrlist,
             filterstr=self._compile_where(),
             ordering_rules=ordering_rules,  # only used when searching via SSSVLV for now
             offset=self.query.low_mark,
+            control_type=control_type,
+            limit=limit
         )
-        if with_limits and self.query.high_mark:
-            ldap_search.limit = self.query.high_mark - self.query.low_mark
-
-        if self.connection.features.supports_sssvlv and ordering_rules:
-            ldap_search.control_type = LDAPSearchControlType.SSSVLV
-        elif self.connection.features.supports_simple_paged_results:
-            ldap_search.control_type = LDAPSearchControlType.SIMPLE_PAGED_RESULTS
-        else:
-            ldap_search.control_type = LDAPSearchControlType.NO_CONTROL
         return ldap_search
 
     def as_sql(self, with_limits=True, with_col_aliases=False) -> tuple[LDAPQuery, tuple]:
