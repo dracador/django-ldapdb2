@@ -87,7 +87,7 @@ class SQLInsertUpdateCompilerTestCase(LDAPTestCase):
     def test_readonly_attributes_changed_after_create(self):
         # Read-only fields should be ignored on create
         instance = create_random_ldap_user()
-        new_dn = 'uid=new_username,ou=Users,dc=example,dc=org'
+        new_dn = 'uid=new_username,CN=Users,dc=example,dc=org'
         instance.entry_dn = new_dn
         instance.full_clean()
         instance.save()
@@ -99,4 +99,4 @@ class SQLInsertUpdateCompilerTestCase(LDAPTestCase):
         user = create_random_ldap_user(username=username)
         user.refresh_from_db()
         self.assertEqual(user.username, username)
-        self.assertEqual(user.dn, f'uid={username},ou=Users,dc=example,dc=org')
+        self.assertEqual(user.dn, f'uid={username},CN=Users,dc=example,dc=org')

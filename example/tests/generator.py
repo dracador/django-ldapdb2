@@ -24,8 +24,8 @@ def create_random_ldap_group(model_cls=LDAPGroup, do_not_create: bool = False, *
         'org_unit': 'group1',
         'name': name,
         'members': [
-            'uid=admin,ou=Users,dc=example,dc=org',
-            'uid=user1,ou=Users,dc=example,dc=org',
+            'uid=admin,CN=Users,dc=example,dc=org',
+            'uid=user1,CN=Users,dc=example,dc=org',
         ],
     }
     if do_not_create:
@@ -40,7 +40,7 @@ def create_random_ldap_user(model_cls=LDAPUser, do_not_create: bool = False, **k
     last_name = fake.last_name()
     username = f'{first_name.lower()}.{last_name.lower()}-{choice(range(1000))}'
     default_kwargs = {
-        # dn=f'uid={username},ou=Users,dc=example,dc=org',
+        # dn=f'uid={username},CN=Users,dc=example,dc=org',
         'first_name': first_name,
         'last_name': last_name,
         'mail': f'{username}@example.com',

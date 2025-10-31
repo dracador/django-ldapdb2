@@ -49,7 +49,7 @@ def queryset_to_ldap_search(queryset: QuerySet) -> LDAPSearch:
 
 def get_new_ldap_search(
     model_cls=LDAPUser,
-    base: str = 'ou=Users,dc=example,dc=org',
+    base: str = 'CN=Users,dc=example,dc=org',
     filterstr: str | None = None,
     attrlist: list[str] | None = None,
     scope: int = None,
@@ -147,7 +147,7 @@ class BaseLDAPTestUser(LDAPModel):
     Until we can order by dn, we need a pk field.
     """
 
-    base_dn = 'ou=Users,dc=example,dc=org'
+    base_dn = 'CN=Users,dc=example,dc=org'
     object_classes = ['inetOrgPerson', 'organizationalPerson', 'x-extendedUser']
 
     username = CharField(db_column='uid', primary_key=True)

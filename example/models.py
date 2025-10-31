@@ -20,7 +20,7 @@ class BaseLDAPUser(LDAPModel):
     Base LDAPUser class that provides some fields needed for an LDAP user model.
     """
 
-    base_dn = 'ou=Users,dc=example,dc=org'
+    base_dn = 'CN=Users,dc=example,dc=org'
     object_classes = ['inetOrgPerson', 'organizationalPerson', 'x-extendedUser']
 
     username = CharField(db_column='uid', primary_key=True)

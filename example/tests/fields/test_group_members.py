@@ -41,8 +41,8 @@ class MemberFieldTestCase(LDAPTestCase):
         self.assertEqual(
             self.existing_test_group.members,
             [
-                'uid=admin,ou=Users,dc=example,dc=org',
-                'uid=user1,ou=Users,dc=example,dc=org',
+                'uid=admin,CN=Users,dc=example,dc=org',
+                'uid=user1,CN=Users,dc=example,dc=org',
             ],
         )
 
@@ -105,14 +105,14 @@ class MemberFieldTestCase(LDAPTestCase):
                 self.user_1.dn,
             ],
         )
-        new_members = ['uid=user2,ou=Users,dc=example,dc=org']
+        new_members = ['uid=user2,CN=Users,dc=example,dc=org']
         instance.members = new_members
         instance.save()
         instance.refresh_from_db()
         self.assertEqual(instance.members, new_members)
 
     def test_update_group_members_replace_strategy(self):
-        new_members = ['uid=user2,ou=Users,dc=example,dc=org']
+        new_members = ['uid=user2,CN=Users,dc=example,dc=org']
         instance = create_random_ldap_group(
             model_cls=LDAPGroupWithReplaceStrategyMemberField,
             members=[

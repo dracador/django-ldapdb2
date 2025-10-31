@@ -11,15 +11,15 @@ THUMBNAIL_PHOTO_BYTES = base64.b64decode(THUMBNAIL_PHOTO_B64)
 
 
 TEST_LDAP_ADMIN_USER_1 = LDAPUser(
-    dn='uid=admin,ou=Users,dc=example,dc=org',
+    dn='uid=admin,CN=Users,dc=example,dc=org',
     username='admin',
     last_name='Admin',
     name='Admin',
-    entry_dn='uid=admin,ou=Users,dc=example,dc=org',  # operational
+    entry_dn='uid=admin,CN=Users,dc=example,dc=org',  # operational
 )
 
 TEST_LDAP_USER_1 = LDAPUser(
-    dn='uid=user1,ou=Users,dc=example,dc=org',
+    dn='uid=user1,CN=Users,dc=example,dc=org',
     first_name='User',
     last_name='One',
     mail='user.one@example.org',
@@ -27,11 +27,11 @@ TEST_LDAP_USER_1 = LDAPUser(
     username='user1',
     is_active=True,
     department_number=1,
-    entry_dn='uid=user1,ou=Users,dc=example,dc=org',  # operational
+    entry_dn='uid=user1,CN=Users,dc=example,dc=org',  # operational
 )
 
 TEST_LDAP_USER_2 = LDAPUser(
-    dn='uid=user2,ou=Users,dc=example,dc=org',
+    dn='uid=user2,CN=Users,dc=example,dc=org',
     first_name='User',
     last_name='Two',
     mail='user.two@example.org',
@@ -39,7 +39,7 @@ TEST_LDAP_USER_2 = LDAPUser(
     username='user2',
     is_active=False,
     department_number=None,
-    entry_dn='uid=user2,ou=Users,dc=example,dc=org',  # operational
+    entry_dn='uid=user2,CN=Users,dc=example,dc=org',  # operational
 )
 
 
@@ -51,8 +51,8 @@ TEST_LDAP_GROUP_1 = LDAPGroup(
     org_unit='group1',
     name='Group1',
     members=[
-        'uid=admin,ou=Users,dc=example,dc=org',
-        'uid=user1,ou=Users,dc=example,dc=org',
+        'uid=admin,CN=Users,dc=example,dc=org',
+        'uid=user1,CN=Users,dc=example,dc=org',
     ],
     descriptions=None,
 )

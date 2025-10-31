@@ -81,9 +81,9 @@ DATABASES = {
     },
     'ldap': {
         'ENGINE': 'ldapdb.backends.ldap',
-        'NAME': 'ldap://localhost',
-        'BIND_DN': 'uid=admin,ou=Users,dc=example,dc=org',
-        'BIND_PASSWORD': 'adminpassword',
+        'NAME': 'ldap://localhost:2389',
+        'BIND_DN': 'cn=Administrator,cn=Users,dc=example,dc=com',
+        'BIND_PASSWORD': 'ThisIsMyAdminPassword^123',
         'PASSWORD_HASHING_ALGORITHM': 'SSHA512',
         'PAGE_SIZE': 999,
         'CONNECTION_OPTIONS': {
@@ -149,7 +149,7 @@ LOGGING = {
     'loggers': {
         'ldapdb': {
             'handlers': ['console'],
-            'level': 'WARNING',
+            'level': 'DEBUG',
             'propagate': True,
         },
         'django.db.backends': {

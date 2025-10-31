@@ -1,0 +1,29 @@
+services:
+  samba:
+    # LDAP Login: cn=Administrator,cn=Users,dc=example,dc=com + ThisIsMyAdminPassword^123
+    image: nowsci/samba-domain
+    container_name: samba
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /data/docker/containers/samba/data/:/var/lib/samba
+      - /data/docker/containers/samba/config/samba:/etc/samba/external
+    environment:
+      - DOMAIN=EXAMPLE.COM
+      - DOMAIN_DC=dc=example,dc=com
+      - DOMAIN_EMAIL=example.com
+      - DOMAINPASS=ThisIsMyAdminPassword^123
+      - INSECURELDAP=true
+      - NOCOMPLEXITY=true
+    ports:
+      - "2389:389"
+      - "2389:389/udp"
+      - "2636:636"
+    hostname: exampledc
+    cap_add:
+      - NET_ADMIN
+      - SYS_NICE
+      - SYS_TIME
+    devices:
+      - /dev/net/tun
+    privileged: true
+    restart: always
