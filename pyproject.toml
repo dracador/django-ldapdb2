@@ -5,8 +5,8 @@ description = "LDAP database backend for Django - loosely based on django-ldapdb
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "Django>=4.2",           # https://docs.djangoproject.com/en/stable/releases/
-    "python-ldap>=3.3",      # https://github.com/python-ldap/python-ldap/releases
+    "Django>=4.2",
+    "python-ldap>=3.3", # https://github.com/python-ldap/python-ldap/releases
 ]
 
 [dependency-groups]

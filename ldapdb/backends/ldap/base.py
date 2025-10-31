@@ -39,6 +39,22 @@ class DatabaseWrapper(BaseDatabaseWrapper):
         super().__init__(*args, **kwargs)
         self.operators = {name: fmt for name, (fmt, _) in LDAP_OPERATORS.items()}
 
+        # txn state
+        self._in_txn: bool = False
+        self._txn_tid: bytes | None = None
+        self._txn_mode: str | None = None  # 'rfc5805' or 'connection'
+        self._needs_rollback: bool = False
+
+    def txn_serverctrls(self) -> list[tuple] | None:
+        """
+        Return the RFC5805 Transaction Specification control when we truly run RFC5805 mode.
+        In connection-scoped mode this returns [].
+        Also see `features.py: supports_transactions` features.py
+        """
+        if self._in_txn and self._txn_mode == 'rfc5805' and self._txn_tid:
+            return [(OID_TXN_SPEC, True, ber_encoder.encode(univ.OctetString(self._txn_tid)))]
+        return []
+
     def _commit(self):
         pass
 

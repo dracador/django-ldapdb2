@@ -1,5 +1,3 @@
-# TODO: Since neither python-ldap nor ldap3 support Request/ResponseControls for transactions,
-#  we'll need to implement our own transaction support.
 
 # From RFC 5805, section 3.1:
 # Start and end transaction OIDs are found in supportedExtension.

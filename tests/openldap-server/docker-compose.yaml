@@ -1,6 +1,8 @@
 services:
   openldap:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: django-ldapdb2-openldap
     ports:
       - '389:389'
@@ -15,3 +17,22 @@ services:
         soft: 1024
         hard: 1024
     command: /init-ldap.sh
+
+  openldap-symas:
+    build:
+      context: .
+      dockerfile: Dockerfile-symas
+    container_name: django-ldapdb2-openldap-symas
+    ports:
+      - '1389:389'
+      - '1636:636'
+    volumes:
+      - './ldifs:/ldifs'
+      - './schema/:/schema'
+      - type: tmpfs
+        target: /var/lib/ldap
+    ulimits:
+      nofile:
+        soft: 1024
+        hard: 1024
+    command: /init-ldap-symas.sh
