@@ -149,7 +149,7 @@ LOGGING = {
     'loggers': {
         'ldapdb': {
             'handlers': ['console'],
-            'level': 'WARNING',
+            'level': 'DEBUG',
             'propagate': True,
         },
         'django.db.backends': {

@@ -9,11 +9,14 @@ from ldap.controls.vlv import VLVRequestControl
 
 from ldapdb.exceptions import LDAPQueryTypeError
 from ldapdb.models import LDAPQuery
+from .ldif_helpers import AddRequest, ModifyRequest
 from .lib import LDAPDatabase, LDAPSearchControlType
 
 if TYPE_CHECKING:
     from ldap.controls import RequestControl
     from ldap.ldapobject import ReconnectLDAPObject
+
+    from .base import DatabaseWrapper
 
 logger = logging.getLogger(__name__)
 
@@ -41,8 +44,9 @@ class DatabaseCursor:
     TODO: Implement a way to sort results in Python if SSS is not used.
     """
 
-    def __init__(self, connection):
+    def __init__(self, connection, db_wrapper: 'DatabaseWrapper'):
         self.connection: ReconnectLDAPObject = connection
+        self.db_wrapper = db_wrapper
         self.query: LDAPQuery | None = None
         self.description = None
         self.rowcount = -1
@@ -57,8 +61,6 @@ class DatabaseCursor:
         return self.query.ldap_search
 
     def search(self):
-        # noinspection PyUnreachableCode
-        # Fixed with PyCharm 2025.2 but EAP is unusable right now
         match self.search_obj.control_type:
             case LDAPSearchControlType.SSSVLV:
                 logger.debug('DatabaseCursor.search: Using SSSVLV control')
@@ -122,6 +124,8 @@ class DatabaseCursor:
 
     def _execute_with_sssvlv(self, timeout: int = -1):
         serverctrls: list[RequestControl] = []
+
+        # serverctrls.extend(self.txn_ctrls)
 
         sss_ordering_rules = [f'{attr}:{order_rule}' for attr, order_rule in self.search_obj.ordering_rules]
         logger.debug('DatabaseCursor._execute_with_sssvlv: Ordering rules: %s', sss_ordering_rules)
@@ -247,3 +251,28 @@ class DatabaseCursor:
         self.query = None
         self.results = []
         self._result_iter = iter([])
+
+    @property
+    def txn_ctrls(self):
+        return self.db_wrapper.ops.get_txn_serverctrls(self.db_wrapper)
+
+    def add(self, dn: str, mods: AddRequest):
+        serverctrls = self.txn_ctrls
+        logger.debug('DatabaseCursor.add: dn: %s, mods: %s, serverctrls: %s', dn, mods.as_modlist(), serverctrls)
+        resp_type, resp_data, resp_msgid, resp_ctrls = self.connection.add_ext_s(dn, mods.as_modlist(), serverctrls=serverctrls)
+        print(f'add_ext_s results: {resp_type=}, {resp_data=}, {resp_msgid=}, {resp_ctrls=}')
+        return resp_type, resp_data, resp_msgid, resp_ctrls
+
+    def add_s(self, dn: str, mods: AddRequest):
+        logger.debug('DatabaseCursor.add: dn: %s, mods: %s', dn, mods.as_modlist())
+        return self.connection.add_s(dn, mods.as_modlist())
+
+    def modify(self, dn: str, mods: ModifyRequest):
+        serverctrls = self.txn_ctrls
+        logger.debug('DatabaseCursor.modify: dn: %s, mods: %s, serverctrls: %s', dn, mods.as_modlist(), serverctrls)
+        return self.connection.modify_ext_s(dn, mods.as_modlist(), serverctrls=serverctrls)
+
+    def delete(self, dn):
+        serverctrls = self.txn_ctrls
+        logger.debug('DatabaseCursor.delete: dn: %s', dn)
+        return self.connection.delete_ext_s(dn, serverctrls=serverctrls)

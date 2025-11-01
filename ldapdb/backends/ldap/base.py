@@ -1,10 +1,13 @@
+import logging
 from functools import cached_property
 
 import ldap
+from django.db import OperationalError
 from django.db.backends.base.base import BaseDatabaseWrapper
 from django.db.backends.base.validation import BaseDatabaseValidation
 from django.db.backends.utils import CursorWrapper
 from django.utils.asyncio import async_unsafe
+from ldap.ldapobject import ReconnectLDAPObject
 
 from .client import DatabaseClient
 from .creation import DatabaseCreation
@@ -14,6 +17,7 @@ from .introspection import DatabaseIntrospection
 from .lib import LDAPDatabase
 from .lookups import LDAP_OPERATORS
 from .operations import DatabaseOperations
+from .transaction import end_ldap_txn, start_ldap_txn
 
 
 class DatabaseWrapper(BaseDatabaseWrapper):
@@ -35,18 +39,60 @@ class DatabaseWrapper(BaseDatabaseWrapper):
     validation: BaseDatabaseValidation
     validation_class = BaseDatabaseValidation
 
+    connection: ReconnectLDAPObject | None
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.operators = {name: fmt for name, (fmt, _) in LDAP_OPERATORS.items()}
 
+        # txn state
+        self._in_txn: bool = False
+        self._needs_rollback: bool = False
+        self._txn_id: bytes | None = None
+        self._dbg_calls = {'set_ac': [], 'commit': 0, 'rollback': 0}
+
+    def _start_ldap_txn(self):
+        try:
+            self._txn_id = start_ldap_txn(self.connection)
+            self._in_txn = True
+        except ldap.LDAPError as exc:
+            raise OperationalError(f'Failed to start LDAP transaction: {exc}') from exc
+
+    def _end_ldap_txn(self, txn_id: bytes, commit: bool):
+        try:
+            end_ldap_txn(self.connection, txn_id, commit)
+        except ldap.LDAPError as exc:
+            raise OperationalError(f'Failed to {"commit" if commit else "abort"} LDAP transaction: {exc}') from exc
+        finally:
+            self._txn_tid = None
+            self._in_txn = False
+
+    def get_autocommit(self):
+        self.ensure_connection()
+        # print("get_autocommit: ", self.autocommit, not self._in_txn,)
+        return not self._in_txn
+
+    def _set_autocommit(self, autocommit: bool):
+        self._dbg_calls['set_ac'].append(autocommit)
+        # self.autocommit = autocommit
+        if not autocommit and self.features.supports_transactions and not self._in_txn:
+            self._start_ldap_txn()
+
     def _commit(self):
-        pass
+        self._dbg_calls['commit'] += 1
+        print('COMMIT CALLED')
+        logging.getLogger('ldapdb').debug(
+            'DatabaseWrapper._commit: Committing transaction',
+        )
+        if self._in_txn:
+            self._end_ldap_txn(self._txn_id, commit=True)
+            self._in_txn = False
 
     def _rollback(self):
-        pass
-
-    def _set_autocommit(self, autocommit):
-        pass
+        self._dbg_calls['rollback'] += 1
+        if self._in_txn:
+            self._end_ldap_txn(self._txn_id, commit=False)
+            self._in_txn = False
 
     @cached_property
     def charset(self):
@@ -74,21 +120,8 @@ class DatabaseWrapper(BaseDatabaseWrapper):
             },
         }
 
-    def ensure_connection(self):
-        super().ensure_connection()
-
-        # Do a test bind, which will revive the connection if interrupted, or reconnect
-        conn_params = self.get_connection_params()
-        try:
-            self.connection.simple_bind_s(
-                conn_params['bind_dn'],
-                conn_params['bind_pw'],
-            )
-        except ldap.SERVER_DOWN:
-            self.connect()
-
     @async_unsafe
-    def get_new_connection(self, conn_params=None):
+    def get_new_connection(self, conn_params=None) -> ReconnectLDAPObject:
         """Build a connection from its parameters."""
         if conn_params is None:
             conn_params = self.get_connection_params()
@@ -114,11 +147,11 @@ class DatabaseWrapper(BaseDatabaseWrapper):
         return connection
 
     @async_unsafe
-    def create_cursor(self, *_args, **_kwargs):
-        return CursorWrapper(DatabaseCursor(self.connection), self)
+    def create_cursor(self, *_args, **_kwargs) -> CursorWrapper:
+        return CursorWrapper(DatabaseCursor(self.connection, db_wrapper=self), self)
 
     @async_unsafe
-    def close(self):
+    def _close(self):
         self.validate_thread_sharing()
 
         if self.connection is not None:

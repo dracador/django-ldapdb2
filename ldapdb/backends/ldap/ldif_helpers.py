@@ -16,7 +16,7 @@ class AddRequest(LDAPRequest):
         if vals:
             self[name] = vals
 
-    def as_modlist(self):
+    def as_modlist(self) -> list[tuple[str, list[bytes]]]:
         return list(self.items())
 
     def __str__(self):
@@ -45,7 +45,7 @@ class ModifyRequest(LDAPRequest):
         vals = self.get_encoded_values(values)
         lst.extend((ldap.MOD_DELETE, val) for val in vals)
 
-    def as_modlist(self):
+    def as_modlist(self) -> list[tuple[int, str, list[bytes]]]:
         modlist = ()
         for attr, mods in self.items():
             for mod in mods:

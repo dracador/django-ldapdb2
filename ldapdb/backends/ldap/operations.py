@@ -2,6 +2,8 @@ from typing import TYPE_CHECKING, Any
 
 from django.db.backends.base.operations import BaseDatabaseOperations
 
+from .transaction import TxnRequestControl
+
 if TYPE_CHECKING:
     from ldapdb.models import LDAPQuery
     from .base import DatabaseWrapper
@@ -31,12 +33,22 @@ class DatabaseOperations(BaseDatabaseOperations):
             converters.append(_unwrap_and_decode)
         return converters
 
+    @staticmethod
+    def get_txn_serverctrls(db_wrapper: 'DatabaseWrapper') -> list:
+        ctrls = []
+        if db_wrapper._in_txn:
+            ctrls.append(TxnRequestControl(db_wrapper._txn_id))
+        return ctrls
+
     def quote_name(self, name):
         return name
 
     def sql_flush(self, *_args, **_kwargs):
         # LDAP does not support SQL flush
         return []
+
+    def execute_sql_flush(self, *_args, **_kwargs):
+        return None
 
     def no_limit_value(self):
         # LDAP does not support limiting query results in the query itself.

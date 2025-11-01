@@ -5,7 +5,7 @@ from faker import Faker
 from example.models import LDAPGroup, LDAPUser
 
 
-def generate_random_group_name() -> str:
+def generate_random_name() -> str:
     fake = Faker()
     return f'{fake.name()}-{choice(range(1000))}'
 
@@ -18,7 +18,7 @@ def generate_random_username() -> str:
 
 
 def create_random_ldap_group(model_cls=LDAPGroup, do_not_create: bool = False, **kwargs) -> LDAPGroup:
-    name = generate_random_group_name()
+    name = generate_random_name()
     default_kwargs = {
         # dn=f'cn={name},ou=Groups,dc=example,dc=org',
         'org_unit': 'group1',

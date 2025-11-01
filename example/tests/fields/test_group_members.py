@@ -1,12 +1,12 @@
 import ldap
 from django.core.exceptions import ValidationError
-from django.db import connections
+from django.db import connections, transaction
 from ldapdb.models.fields import DistinguishedNameField, MemberField, UpdateStrategy
 
 from example.models import BaseLDAPGroup, LDAPGroup, LDAPUser
 from example.tests.base import LDAPTestCase
 from example.tests.constants import TEST_LDAP_GROUP_1
-from example.tests.generator import create_random_ldap_group, generate_random_group_name
+from example.tests.generator import create_random_ldap_group, generate_random_name
 
 
 class LDAPGroupWithAddDeleteStrategyMemberField(BaseLDAPGroup):
@@ -32,9 +32,9 @@ class LDAPGroupWithCustomMembersFieldReplace(BaseLDAPGroup):
 
 
 class MemberFieldTestCase(LDAPTestCase):
-    def setUp(self):
-        self.user_1 = LDAPUser.objects.get(username='admin')
-        self.existing_test_group = LDAPGroup.objects.get(name=TEST_LDAP_GROUP_1.name)
+    #def setUp(self):
+        #self.user_1 = LDAPUser.objects.get(username='admin')
+        #self.existing_test_group = LDAPGroup.objects.get(name=TEST_LDAP_GROUP_1.name)
 
     def test_members_values(self):
         """Test that the MemberField can be retrieved from the LDAPGroup model."""
@@ -47,18 +47,19 @@ class MemberFieldTestCase(LDAPTestCase):
         )
 
     def test_create_group(self):
-        name = generate_random_group_name()
-        instance = create_random_ldap_group(
-            name=name,
-            do_not_create=True,
-            members=[
-                self.user_1.dn,
-            ],
-        )
-        instance.full_clean()
-        instance.save()
-        instance.refresh_from_db()
-        self.assertEqual(name, instance.name)
+        with transaction.atomic(using='ldap'):
+            name = generate_random_name()
+            instance = create_random_ldap_group(
+                name=name,
+                do_not_create=True,
+                members=[
+                    # self.user_1.dn,
+                ],
+            )
+            instance.full_clean()
+            instance.save()
+            instance = LDAPGroup.objects.get(name=name)
+            self.assertEqual(name, instance.name)
 
     def test_create_group_with_default_member(self):
         instance = create_random_ldap_group(

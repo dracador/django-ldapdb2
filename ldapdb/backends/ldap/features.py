@@ -1,13 +1,16 @@
 from functools import cached_property
 from typing import TYPE_CHECKING
 
-from django import VERSION as DJANGO_VERSION
 from django.db.backends.base.features import BaseDatabaseFeatures
 from ldap.controls import SimplePagedResultsControl
 from ldap.controls.sss import SSSRequestControl
 from ldap.controls.vlv import VLVRequestControl
 
-from ldapdb.backends.ldap.controls import LDAP_OID_TRANSACTION_END, LDAP_OID_TRANSACTION_START
+from ldapdb.backends.ldap.transaction import (
+    LDAP_OID_TRANSACTION_END,
+    LDAP_OID_TRANSACTION_SPECIFICATION_CONTROL,
+    LDAP_OID_TRANSACTION_START,
+)
 
 if TYPE_CHECKING:
     from ldap.ldapobject import ReconnectLDAPObject
@@ -175,11 +178,46 @@ class DatabaseFeatures(BaseDatabaseFeatures):
 
     @cached_property
     def supports_transactions(self) -> bool:
-        """Confirm support for transactions. Transactions have been introduced in OpenLDAP 2.5"""
-        if DJANGO_VERSION < (5, 1):
-            # We currently don't really support transactions yet but we can at least check if the server supports them.
-            # Django 5.1+ can still handle normal operations without transactions even if this property is True.
-            return False
+        """
+        Confirm support for transactions, which have been introduced in OpenLDAP 2.5.
 
+        This only checks for the presence of transactionStart (1.3.6.1.1.21.1)
+        and transactionEnd (1.3.6.1.1.21.3) extensions.
+
+        For full RFC 5805 compliance, we'd also need to check for the presence of
+        the Transaction Specification Control (1.3.6.1.1.21.2).
+        However, even OpenLDAP itself does not support this control as of version 2.6.7.
+
+        The RFC 5805 specifies the transactional workflow like the following:
+        1) Send "Transaction Start" request -> Server returns "Transaction ID"
+        2) Send "Add/Modify/Delete/..." request with an extra server ctrl containing that "Transaction ID"
+        3) Send "Transaction End" request with a "commit" or "abort" attribute containing "Transaction ID"
+
+        The way OpenLDAP handles this as of 2.6.7 is as follows:
+        1) Send "Transaction Start" request -> Server returns no Transaction ID.
+           Instead, it marks the connection as "in transaction" and just implicitly uses the mdb backend transaction.
+        2) All subsequent requests are sent with a Transactional Control where the Transaction ID is empty.
+        3) Send "Transaction End" request with a "commit" or "abort" attribute containing the empty "Transaction ID"
+        Reference: https://git.openldap.org/openldap/openldap/-/blob/master/servers/slapd/txn.c
+
+        Also see `supports_ldap_transaction_control` for the implementation of the Transaction Specification Control.
+        """
         tx_oids = {LDAP_OID_TRANSACTION_START, LDAP_OID_TRANSACTION_END}
         return tx_oids.issubset(self.supported_extensions)
+
+    @cached_property
+    def supports_ldap_transaction_control(self):
+        """
+        Confirm support for LDAP Transaction Control
+
+        If the proper supportedControl (1.3.6.1.1.21.2) is present,
+        we'll try using transactions the way as it's specified in RFC 5805.
+
+        Please note:
+        Just because the server says it supports the control does not mean it actually implements it.
+        This is the case with the symas-OpenLDAP package.
+        It still uses the non-RFC 5805 implementation described in `supports_transactions`.
+        The real distinction is made in `transactions.py:start_ldap_txn()`.
+        We'll have to check for this flag once more LDAP servers start supporting RFC 5805.
+        """
+        return LDAP_OID_TRANSACTION_SPECIFICATION_CONTROL in self.supported_controls

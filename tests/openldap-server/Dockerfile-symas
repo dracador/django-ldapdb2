@@ -1,0 +1,12 @@
+FROM ubuntu:24.04
+
+RUN apt update && apt install -y curl tree
+RUN curl --output /usr/share/keyrings/symas-key.asc "https://repo.symas.com/repo/gpg/RPM-GPG-KEY-symas-com-signing-key"
+RUN echo 'deb [arch=amd64 signed-by=/usr/share/keyrings/symas-key.asc] https://repo.symas.com/repo/deb/main/release26 noble main' | tee -a /etc/apt/sources.list.d/soldap-release26.list
+RUN apt update && apt install -y symas-openldap-clients symas-openldap-server
+
+COPY ./slapd-symas.conf /etc/ldap/slapd-symas.conf
+COPY ./init-ldap-symas.sh /init-ldap-symas.sh
+RUN chmod +x /init-ldap-symas.sh
+
+EXPOSE 389 636
