@@ -1,0 +1,83 @@
+# yaml-language-server: $schema=https://squidfunk.github.io/mkdocs-material/schema.json
+
+site_name: django-ldapdb2
+site_url: https://sitename.example
+repo_url: https://github.com/dracador/django-ldapdb2
+repo_name: dracador/django-ldapdb2
+edit_uri: "blob/main/docs/"
+dev_addr: 127.0.0.1:8001
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.tracking
+    - navigation.top
+    - content.code.copy
+    - toc.follow
+    - search.suggest
+    - search.share
+  icon:
+    repo: fontawesome/brands/github
+  palette:
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to system preference
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.snippets
+  - pymdownx.highlight
+  - pymdownx.magiclink
+  - pymdownx.emoji
+
+plugins:
+  - search
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          options:
+            docstring_style: google
+            show_source: true
+            merge_init_into_class: true
+            separate_signature: true
+            show_signature_annotations: true
+            filters:
+              - "!^_"
+
+nav:
+  - index.md
+  - Installation & Setup: installation.md
+  - Quickstart (Django): quickstart.md
+  - Guides:
+    - Models: guides/models.md
+    - Fields: guides/fields.md
+    - Querying LDAP: guides/queries.md
+    - Transactions & Atomicity: guides/transactions.md
+    - Sorting & Pagination (SSSVLV): guides/sorting_and_pagination.md
+    - Debugging & Logging: guides/logging.md
+  - Server Compatibility:
+    - OpenLDAP: servers/openldap.md
+    # - Active Directory / Samba AD: servers/ad.md
+  - CLI & Management:
+    - checkdb / inspectdb: cli/check-and-inspect.md
+  - Contributing: contributing.md
+  - Changelog: changelog.md

@@ -12,7 +12,7 @@ This also forced all entries to have the same objectClass values, which might no
 
 To keep the existing behaviour, set the ```base_filter``` attribute to include the object_classes.
 
-- [ ] ref: [LDAPModel](../ldapdb/models.py)
+::: ldapdb.models.LDAPModel
 
 # Fields
 
