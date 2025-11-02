@@ -10,23 +10,18 @@ This caused issues when trying to add a new objectClass value to the object beca
 objectClass has been added to the object before you make changes to the models ```object_classes```.
 This also forced all entries to have the same objectClass values, which might not be desired.
 
-That's why ```object_classes``` is now a ListField instead of a class attribute.
 To keep the existing behaviour, set the ```base_filter``` attribute to include the object_classes.
 
 - [ ] ref: [LDAPModel](../ldapdb/models.py)
 
 # Fields
 
-## Distinguished Name (dn) field
-
-```dn``` is now a first class field like all the other attributes. That means you're now able to filter by it.
-
 ## Custom fields
 
-If you created any custom fields, the behavior has changed slightly. Fields now inherit from ```LDAPFieldMixin```.
-Check the documentation for LDAPFieldMixin to see what methods you need to implement.
+If you created any custom fields, the behavior has changed slightly. Fields now inherit from ```LDAPField```.
+Check the documentation for LDAPField to see what methods you need to implement.
 
-- [ ] ref: [LDAPFieldMixin](../ldapdb/fields.py)
+- [ ] ref: [LDAPField](../ldapdb/fields.py)
 
 # Lookups
 
