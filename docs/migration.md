@@ -1,4 +1,4 @@
-Migration from django-ldapdb
+Migrating from django-ldapdb
 ============================
 
 # Models
