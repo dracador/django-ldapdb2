@@ -94,7 +94,7 @@ class LDAPField(django_fields.Field, RenderLookupProtocol):
             return value if self.multi_valued_field else value[0]
 
         decoded_vals = [v.decode(connection.charset) if isinstance(v, bytes | bytearray) else v for v in value]
-        return decoded_vals if self.multi_valued_field else decoded_vals[0]
+        return sorted(decoded_vals) if self.multi_valued_field else decoded_vals[0]
 
     def _check_default(self, **_kwargs):
         if self.default is None and not self.null:
