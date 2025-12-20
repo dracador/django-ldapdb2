@@ -65,9 +65,6 @@ combine-as-imports = true
 no-lines-before = ["local-folder"]
 relative-imports-order = "closest-to-furthest"
 
-[tool.ruff.lint.mccabe]
-max-complexity = 13
-
 [tool.ruff.lint.pylint]
 max-args = 15  # default is 5
 max-branches = 28  # default is 12
