@@ -46,8 +46,6 @@ def eval_lookup(expr: Lookup, instance):
     return py_fn(lhs_val, rhs_val)
 
 
-# noinspection PyUnreachableCode
-# Fixed with PyCharm 2025.2 but EAP is unusable right now
 def eval_expr(expr: Expression, instance):  # noqa: PLR0911
     match expr:
         case Col(target=field):

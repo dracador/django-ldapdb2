@@ -99,11 +99,11 @@ class LDAPBaseIterable(BaseIterable):
             return
 
         proxy = SimpleNamespace(**row_dict)
-        for alias, expr in annotations.items():
-            try:
+        try:
+            for alias, expr in annotations.items():
                 row_dict[alias] = eval_expr(expr, proxy)
-            except NotImplementedError as e:
-                raise NotSupportedError(f'Expression {expr.__class__.__name__} not supported in LDAP queries') from e
+        except NotImplementedError as e:
+            raise NotSupportedError('Expression not allowed.') from e
 
     def _row_to_dict(self, raw: Any, columns: list[str], extra_columns: list[str]) -> dict:
         raise NotImplementedError()

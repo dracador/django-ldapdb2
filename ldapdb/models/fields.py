@@ -9,6 +9,7 @@ from django.core.exceptions import FieldError
 from django.db.models import Lookup, fields as django_fields
 from django.utils.timezone import is_naive
 
+from ldapdb.typing_compat import override
 from ldapdb.validators import validate_dn
 
 if TYPE_CHECKING:
@@ -140,7 +141,8 @@ class LDAPField(django_fields.Field, RenderLookupProtocol):
             self.run_validators(value)
         return value
 
-    def get_db_prep_value(self, value: Any, connection: 'DatabaseWrapper', prepared: bool = False):  # noqa: ARG002
+    @override
+    def get_db_prep_value(self, value: Any, connection: 'DatabaseWrapper', prepared: bool = False):
         """Prepare a value for DB interaction.
 
         Returns:
@@ -255,9 +257,8 @@ class EmailField(django_fields.EmailField, CharField):
 
 class IntegerField(django_fields.IntegerField, LDAPField):
     def __init__(self, *args, **kwargs):
-        defaults = {'null': True}
-        defaults.update(kwargs)
-        super().__init__(*args, **defaults)
+        kwargs['null'] = True
+        super().__init__(*args, **kwargs)
 
     def from_db_value(self, value, expression, connection):
         value = super().from_db_value(value, expression, connection)
@@ -318,7 +319,7 @@ def parse_generalized_time(s: str) -> datetime:
         parts['hour'] or 0,
         parts['minute'] or 0,
         parts['second'] or 0,
-        int(float(f"0.{parts['frac']}") * 1_000_000) if parts['frac'] else 0,
+        int(float(f'0.{parts["frac"]}') * 1_000_000) if parts['frac'] else 0,
     )
 
     tz = parts['tz']

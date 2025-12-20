@@ -69,6 +69,7 @@ dependencies = [
     { name = "django", version = "5.2.9", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "django", version = "6.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "python-ldap" },
+    { name = "typing-extensions", marker = "python_full_version < '3.12'" },
 ]
 
 [package.dev-dependencies]
@@ -83,6 +84,7 @@ dev = [
 requires-dist = [
     { name = "django", specifier = ">=4.2" },
     { name = "python-ldap", specifier = ">=3.3" },
+    { name = "typing-extensions", marker = "python_full_version < '3.12'" },
 ]
 
 [package.metadata.requires-dev]

@@ -7,6 +7,7 @@ requires-python = ">=3.10"
 dependencies = [
     "Django>=4.2",           # https://docs.djangoproject.com/en/stable/releases/
     "python-ldap>=3.3",      # https://github.com/python-ldap/python-ldap/releases
+    "typing-extensions ; python_version < '3.12'",
 ]
 
 [dependency-groups]
@@ -22,7 +23,7 @@ dev = [
 #
 [tool.ruff]
 src = ["ldapdb"]
-target-version = "py312"
+target-version = "py310"
 line-length = 120
 indent-width = 4
 
@@ -57,6 +58,7 @@ ignore = [
     "PERF401", # manual-list-comprehension - Forcing us to use list comprehensions with dicts inside them is weird.
     "UP015",   # redundant-open-modes - We like to have the mode explicitly set in open() calls
 ]
+typing-modules = ["ldapdb.typing_compat"]  # can be removed once we're only supporting python >= 3.12
 
 [tool.ruff.lint.isort]
 combine-as-imports = true
