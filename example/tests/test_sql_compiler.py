@@ -101,6 +101,11 @@ class SQLCompilerTestCase(LDAPTestCase):
         expected_ldap_search = get_new_ldap_search(filterstr='(!(x-user-isActive=*))')
         self.assertLDAPSearchIsEqual(queryset, expected_ldap_search)
 
+    def test_ldapuser_filter_injection(self):
+        queryset = LDAPUser.objects.filter(username="*)(uid=*")
+        expected_ldap_search = get_new_ldap_search(filterstr=r'(uid=\2a\29\28uid=\2a)')
+        self.assertLDAPSearchIsEqual(queryset, expected_ldap_search)
+
     def test_ldapuser_order_by(self):
         queryset = LDAPUser.objects.all().order_by('name')
         expected_ldap_search = get_new_ldap_search(ordering_rules=[('cn', 'caseIgnoreOrderingMatch')])

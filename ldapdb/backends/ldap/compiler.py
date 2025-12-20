@@ -11,12 +11,13 @@ from django.db.models.sql import compiler
 from django.db.models.sql.compiler import PositionRef, SQLCompiler as BaseSQLCompiler
 from django.db.models.sql.constants import CURSOR, GET_ITERATOR_CHUNK_SIZE, MULTI
 from django.db.models.sql.where import NothingNode, WhereNode
+from ldap.filter import escape_filter_chars
 
 from ldapdb.exceptions import LDAPModelTypeError
 from ldapdb.models import LDAPModel, LDAPQuery
 from ldapdb.models.fields import UpdateStrategy
 from .ldif_helpers import AddRequest, ModifyRequest
-from .lib import LDAPSearch, LDAPSearchControlType, escape_ldap_filter_value
+from .lib import LDAPSearch, LDAPSearchControlType
 from .lookups import LDAP_OPERATORS
 
 try:
@@ -161,7 +162,7 @@ class SQLCompiler(BaseSQLCompiler):
         operator_format, _ = LDAP_OPERATORS.get(lookup_type, (None, None))
 
         if lookup_type == 'in':
-            values = ''.join([f'({field_name}={escape_ldap_filter_value(v)})' for v in rhs])
+            values = ''.join([f'({field_name}={escape_filter_chars(v)})' for v in rhs])
             ldap_filter = f'(|{values})'
             logger.debug("Generated LDAP filter for 'in' lookup: %s", ldap_filter)
             return ldap_filter
@@ -177,7 +178,7 @@ class SQLCompiler(BaseSQLCompiler):
                 raise NotImplementedError(f'Unsupported lookup type: {lookup_type}')
             parts = []
             for v in rhs:
-                escaped_value = escape_ldap_filter_value(v)
+                escaped_value = escape_filter_chars(v)
                 parts.append(f'({field_name}{operator_format % escaped_value})')
             ldap_filter = f'(|{"".join(parts)})'
             logger.debug(
@@ -187,7 +188,7 @@ class SQLCompiler(BaseSQLCompiler):
             )
             return ldap_filter
         elif operator_format:
-            escaped_value = escape_ldap_filter_value(rhs)
+            escaped_value = escape_filter_chars(rhs)
             ldap_filter = f'({field_name}{operator_format % escaped_value})'
             logger.debug("Generated LDAP filter for lookup '%s': %s", lookup_type, ldap_filter)
             return ldap_filter

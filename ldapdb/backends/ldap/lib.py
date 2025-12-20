@@ -208,15 +208,3 @@ def unescape_ldap_dn_chars(value: str) -> str:
     Returns a string with all escaped LDAP special characters unescaped.
     """
     return LDAP_UNESCAPE_RE.sub(lambda m: chr(int(m.group(1), 16)), value)
-
-
-def escape_ldap_filter_value(value: str):
-    """
-    Escape special characters in LDAP filter values.
-    """
-    value = value.replace('\\', '\\5c')
-    value = value.replace('*', '\\2a')
-    value = value.replace('(', '\\28')
-    value = value.replace(')', '\\29')
-    value = value.replace('\x00', '\\00')
-    return value
