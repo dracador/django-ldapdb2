@@ -5,6 +5,7 @@ import ldap
 from django.db.models import QuerySet
 from django.test import TestCase
 from ldapdb.backends.ldap import LDAPSearch, LDAPSearchControlType
+from ldapdb.backends.ldap.lib import LDAPScope
 from ldapdb.models import LDAPModel
 from ldapdb.models.fields import CharField
 
@@ -52,7 +53,7 @@ def get_new_ldap_search(
     base: str = 'ou=Users,dc=example,dc=org',
     filterstr: str | None = None,
     attrlist: list[str] | None = None,
-    scope: int = None,
+    scope: LDAPScope = None,
     ordering_rules: list[tuple[str, str]] | None = None,
     limit: int = 0,
     offset: int = 0,

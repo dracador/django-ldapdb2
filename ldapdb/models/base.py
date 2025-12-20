@@ -5,6 +5,7 @@ from django.db import DEFAULT_DB_ALIAS, NotSupportedError, connections, models a
 from django.db.models import QuerySet
 from django.db.models.sql import Query
 
+from ldapdb.backends.ldap.lib import LDAPScope
 from ldapdb.exceptions import LDAPModelTypeError
 from ldapdb.iterables import (
     LDAPFlatValuesListIterable,
@@ -84,7 +85,7 @@ class LDAPQuerySet(QuerySet):
 class LDAPModel(django_models.Model):
     base_dn: str = None
     base_filter: str = '(objectClass=*)'  # the base filter will be always be applied to all queries
-    search_scope: int = ldap.SCOPE_SUBTREE
+    search_scope: LDAPScope = ldap.SCOPE_SUBTREE
     object_classes: list[str] = None  # TODO: object_classes should be a ListField of some sort
 
     objects = LDAPQuerySet.as_manager()

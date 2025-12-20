@@ -4,6 +4,13 @@ import json
 import ldap
 
 
+class LDAPScope(enum.IntEnum):
+    BASE = ldap.SCOPE_BASE
+    ONELEVEL = ldap.SCOPE_ONELEVEL
+    SUBTREE = ldap.SCOPE_SUBTREE
+    SUBORDINATE = ldap.SCOPE_SUBORDINATE
+
+
 class LDAPSearchControlType(str, enum.Enum):
     NO_CONTROL = 'no_control'
     SIMPLE_PAGED_RESULTS = 'simple_paged_results'
@@ -16,7 +23,7 @@ class LDAPSearch:
         base: str,
         filterstr: str = '(objectClass=*)',
         attrlist: list[str] | None = None,
-        scope: ldap.SCOPE_BASE | ldap.SCOPE_ONELEVEL | ldap.SCOPE_SUBTREE = ldap.SCOPE_SUBTREE,
+        scope: LDAPScope = ldap.SCOPE_SUBTREE,
         ordering_rules: list[tuple[str, str]] | None = None,
         control_type: LDAPSearchControlType = LDAPSearchControlType.NO_CONTROL,
         limit: int = 0,  # 0 means no limit. Corresponds to (high_mark - low_mark) in Django,
