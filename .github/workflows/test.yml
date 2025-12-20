@@ -10,7 +10,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ['3.10', '3.11', '3.12', '3.13', '3.14']  # based on Django 4.2 (LTS) + 5.1 + 5.2 (LTS)
+        python-version: ['3.10', '3.11', '3.12', '3.13', '3.14']  # based on Django 4.2 (LTS) + 5.2 (LTS) + 6.0
 
     steps:
     - name: Install LDAP deps
