@@ -95,8 +95,16 @@ class SQLInsertUpdateCompilerTestCase(LDAPTestCase):
         self.assertNotEqual(instance.entry_dn, new_dn)
 
     def test_escaped_characters_in_dn(self):
-        username = f'*kläüß?gonzález*-{choice(range(1000))}'
+        # See ldapdb.lib.escape_ldap_dn_chars()
+        # Note: "#" is a special case, in that it only needs to be escaped at the start of an RDN
+        dn_special_chars = ['\\', ',', '#', '+', '<', '>', ';', '"', '=']
+
+        username = '#kläüßgonzález' + ''.join(dn_special_chars) + str(choice(range(1000)))
         user = create_random_ldap_user(username=username)
-        user.refresh_from_db()
         self.assertEqual(user.username, username)
         self.assertEqual(user.dn, f'uid={username},ou=Users,dc=example,dc=org')
+
+        dn_before_refresh = user.dn
+        user.refresh_from_db()
+        dn_after_refresh = user.dn
+        self.assertEqual(dn_before_refresh, dn_after_refresh)

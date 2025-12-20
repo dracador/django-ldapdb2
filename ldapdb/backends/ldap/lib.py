@@ -1,5 +1,6 @@
 import enum
 import json
+import re
 
 import ldap
 
@@ -185,3 +186,37 @@ class LDAPDatabase:
         DatabaseError,
         ldap.NOT_SUPPORTED,
     )
+
+
+LDAP_ESCAPE_RE = re.compile(r'[\\,#+<>;\"=]')
+LDAP_UNESCAPE_RE = re.compile(r'\\([0-9a-fA-F]{2})')
+
+
+def escape_ldap_dn_chars(value: str) -> str:
+    """
+    Returns a string with all LDAP special characters escaped per RFC 4514.
+    Using ldap.dn.escape_dn_chars" results in strings not being escaped as hexadecimal,
+    which is what the LDAP server returns per RFC 4514.
+
+    Note: "#" only has to be escaped when it's at the start or end of an RDN (for openLDAP at least).
+    """
+    return LDAP_ESCAPE_RE.sub(lambda m: f"\\{ord(m.group()):02X}", value)
+
+
+def unescape_ldap_dn_chars(value: str) -> str:
+    """
+    Returns a string with all escaped LDAP special characters unescaped.
+    """
+    return LDAP_UNESCAPE_RE.sub(lambda m: chr(int(m.group(1), 16)), value)
+
+
+def escape_ldap_filter_value(value: str):
+    """
+    Escape special characters in LDAP filter values.
+    """
+    value = value.replace('\\', '\\5c')
+    value = value.replace('*', '\\2a')
+    value = value.replace('(', '\\28')
+    value = value.replace(')', '\\29')
+    value = value.replace('\x00', '\\00')
+    return value

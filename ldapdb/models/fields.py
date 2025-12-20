@@ -216,7 +216,7 @@ class DistinguishedNameField(CharField):
     _allowed_lookups = {'exact', 'iexact', 'in', 'isnull'}
     default_validators = [validate_dn]
 
-    def get_lookup(self, lookup_name: str) -> Lookup:
+    def get_lookup(self, lookup_name: str) -> Lookup | None:
         if lookup_name not in self._allowed_lookups:
             raise FieldError(
                 f'Lookup {lookup_name} is not supported for DN fields. '

@@ -15,9 +15,8 @@ from django.db.models.sql.where import NothingNode, WhereNode
 from ldapdb.exceptions import LDAPModelTypeError
 from ldapdb.models import LDAPModel, LDAPQuery
 from ldapdb.models.fields import UpdateStrategy
-from ldapdb.utils import escape_ldap_filter_value
 from .ldif_helpers import AddRequest, ModifyRequest
-from .lib import LDAPSearch, LDAPSearchControlType
+from .lib import LDAPSearch, LDAPSearchControlType, escape_ldap_filter_value
 from .lookups import LDAP_OPERATORS
 
 try:
@@ -301,7 +300,7 @@ class SQLCompiler(BaseSQLCompiler):
             ordering_rules=ordering_rules,  # only used when searching via SSSVLV for now
             offset=self.query.low_mark,
             control_type=control_type,
-            limit=limit
+            limit=limit,
         )
         return ldap_search
 
@@ -331,12 +330,12 @@ class SQLCompiler(BaseSQLCompiler):
 class SQLUpdateCompiler(compiler.SQLUpdateCompiler, SQLCompiler):
     def execute_sql(self, returning_fields=None):  # noqa: ARG002 - don't need returning_fields, we just force another search
         model = cast('LDAPModel', cast('object', self.query.model))
-        db = cast('DatabaseWrapper', self.connection)
+        db = self.connection
         ldap_conn = self._get_ldap_conn()
         charset = db.charset
 
         pk_val = self._pk_value_from_where()
-        dn = model.build_dn(pk_val)
+        dn = model.build_dn(pk_val, escape_chars=True)
 
         with db.wrap_database_errors:
             try:
@@ -408,13 +407,14 @@ class SQLInsertCompiler(compiler.SQLInsertCompiler, SQLCompiler):
 
         obj = cast('LDAPModel', self.query.objs[0])
         model = cast('LDAPModel', cast('object', self.query.model))
-        db = cast('DatabaseWrapper', self.connection)
+        db = self.connection
         ldap_conn = self._get_ldap_conn()
 
-        # build DN
-        pk_field = model._meta.pk
-        rdn_val = getattr(obj, pk_field.attname)
-        obj.dn = obj.build_dn(rdn_val)
+        # Set obj.dn only for representation in django space.
+        obj.dn = obj.build_dn_from_pk(escape_chars=False)
+
+        # DN to use for LDAP operation
+        dn = obj.build_dn_from_pk(escape_chars=True)
 
         add = AddRequest()
         add.charset = db.charset
@@ -434,11 +434,11 @@ class SQLInsertCompiler(compiler.SQLInsertCompiler, SQLCompiler):
 
             add.add(field.column, prep)
 
-        logger.debug('LDAP add request for %s\n%s', obj.dn, add)
+        logger.debug('LDAP add request for %s\n%s', dn, add)
 
         with self.connection.wrap_database_errors:
             # make sure any exceptions bubble up as proper Django errors
-            ldap_conn.add_s(obj.dn, add.as_modlist())
+            ldap_conn.add_s(dn, add.as_modlist())
 
         return []  # Django does not care about the return value of execute_sql() for INSERTs
 
@@ -455,7 +455,7 @@ class SQLDeleteCompiler(compiler.SQLDeleteCompiler, SQLCompiler):
         ldap_conn = self._get_ldap_conn()
 
         pk_val = self._pk_value_from_where()
-        dn = model.build_dn(pk_val)
+        dn = model.build_dn(pk_val, escape_chars=True)
 
         logger.debug('LDAP delete request for %s', dn)
 

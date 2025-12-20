@@ -9,7 +9,7 @@ from ldap.controls.vlv import VLVRequestControl
 
 from ldapdb.exceptions import LDAPQueryTypeError
 from ldapdb.models import LDAPQuery
-from .lib import LDAPDatabase, LDAPSearchControlType
+from .lib import LDAPDatabase, LDAPSearchControlType, unescape_ldap_dn_chars
 
 if TYPE_CHECKING:
     from ldap.controls import RequestControl
@@ -42,14 +42,16 @@ class DatabaseCursor:
     """
 
     def __init__(self, connection):
-        self.connection: ReconnectLDAPObject = connection
+        self.connection: ReconnectLDAPObject | None = connection
         self.query: LDAPQuery | None = None
         self.description = None
         self.rowcount = -1
         self.arraysize = 1
         self.closed = False
         self.lastrowid = None
-        self.results: list[tuple[str, dict]] = []
+
+        # results can be either a list of tuples (dn, attributes) or a list of integers (count)
+        self.results: list[tuple[str, dict]] | list[tuple[int]] = []
         self._result_iter = iter([])
 
     @property
@@ -193,6 +195,9 @@ class DatabaseCursor:
 
         results = []
         for dn, attributes in self.results:
+            # dn might contain hexadecimal characters, so decode it first
+            dn = unescape_ldap_dn_chars(dn)
+
             row_data = {}
             for attr_name in column_names:
                 if attr_name == 'dn':

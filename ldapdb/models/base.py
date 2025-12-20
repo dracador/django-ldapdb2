@@ -5,7 +5,7 @@ from django.db import DEFAULT_DB_ALIAS, NotSupportedError, connections, models a
 from django.db.models import QuerySet
 from django.db.models.sql import Query
 
-from ldapdb.backends.ldap.lib import LDAPScope
+from ldapdb.backends.ldap.lib import LDAPScope, escape_ldap_dn_chars
 from ldapdb.exceptions import LDAPModelTypeError
 from ldapdb.iterables import (
     LDAPFlatValuesListIterable,
@@ -114,14 +114,13 @@ class LDAPModel(django_models.Model):
         using = kwargs.get('using') or self._state.db or DEFAULT_DB_ALIAS
 
         if not self._state.adding and getattr(self, 'dn', None):
-            old_dn = self.dn
-            new_dn = self._desired_dn()
-            if new_dn != old_dn:
-                new_rdn = new_dn.split(',', 1)[0]
+            new_dn = self.build_dn_from_pk(escape_chars=True)
+            if new_dn != self.escaped_dn:
+                new_rdn = self.build_rdn(self.rdn_value, escape_chars=True)
                 conn = connections[using]
                 with conn.wrap_database_errors, conn.cursor() as cursor:
                     ldap_conn = cursor.db.connection
-                    ldap_conn.rename_s(old_dn, new_rdn)
+                    ldap_conn.rename_s(self.escaped_dn, new_rdn)
                 self.dn = new_dn
 
         return super().save(*args, **kwargs)
@@ -150,15 +149,29 @@ class LDAPModel(django_models.Model):
                 )
 
     @classmethod
-    def build_rdn(cls, rdn_value):
+    def build_rdn(cls, rdn_value: str, escape_chars: bool = True) -> str:
         pk_field = cls._meta.pk
+        if escape_chars:
+            rdn_value = escape_ldap_dn_chars(rdn_value)
         return f'{pk_field.column}={rdn_value}'
 
-    @classmethod
-    def build_dn(cls, rdn_value):
-        return f'{cls.build_rdn(rdn_value)},{cls.base_dn}'
-
-    def _desired_dn(self):
+    @property
+    def rdn_value(self) -> str:
         pk_field = self._meta.pk
-        rdn_val = getattr(self, pk_field.attname)
-        return self.build_dn(rdn_val)
+        return getattr(self, pk_field.attname)
+
+    @classmethod
+    def build_dn(cls, rdn_value: str, escape_chars: bool = True) -> str:
+        return f'{cls.build_rdn(rdn_value, escape_chars)},{cls.base_dn}'
+
+    @property
+    def escaped_dn(self) -> str:
+        """
+        Extract rdn from dn, escape it, and rebuild dn
+        """
+        dn_parts = ldap.dn.str2dn(self.dn)
+        rdn_attr, rdn_val, _ = dn_parts[0][0]  # this might break when the DN has multiple RDNs
+        return self.build_dn(rdn_val, escape_chars=True)
+
+    def build_dn_from_pk(self, escape_chars: bool = True):
+        return self.build_dn(self.rdn_value, escape_chars)
