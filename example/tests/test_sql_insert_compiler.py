@@ -1,5 +1,3 @@
-from random import choice
-
 from django.db import DatabaseError, IntegrityError
 
 from example.models import LDAPUser
@@ -81,6 +79,17 @@ class SQLInsertUpdateCompilerTestCase(LDAPTestCase):
         instance = create_random_ldap_user(do_not_create=True)
         instance.full_clean()
         instance.save()
+
+        # TODO: Calling the following line without a refresh_from_db() breaks the test.
+        #  The issue here is that the SQLInsertCompiler does (and should) not make another search
+        #  for readonly attributes.
+        #  After the creation in the compiler, the object is considered to be up-to-date by django.
+        #  We do not have the values for the operational attributes yet, though.
+        #  Possible solution: mark these readonly fields as "deferred" inside .save(), somehow.
+        #  Make sure to check that this solution does not run into O(n^2) issues,
+        #  where django does a single request to fetch each of these fields.
+        # self.assertEqual(instance.dn, instance.entry_dn)
+
         instance.refresh_from_db()
         self.assertEqual(instance.dn, instance.entry_dn)
 
