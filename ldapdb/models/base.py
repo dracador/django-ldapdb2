@@ -1,6 +1,7 @@
 from typing import TYPE_CHECKING
 
 import ldap
+from django.core.exceptions import ValidationError
 from django.db import DEFAULT_DB_ALIAS, NotSupportedError, connections, models as django_models
 from django.db.models import QuerySet
 from django.db.models.sql import Query
@@ -114,8 +115,9 @@ class LDAPModel(django_models.Model):
         using = kwargs.get('using') or self._state.db or DEFAULT_DB_ALIAS
 
         if not self._state.adding and getattr(self, 'dn', None):
-            new_dn = self.build_dn_from_pk(escape_chars=True)
-            if new_dn != self.escaped_dn:
+            new_dn = self.build_dn_from_pk(escape_chars=False)
+            new_dn_escaped = self.build_dn_from_pk(escape_chars=True)
+            if new_dn_escaped != self.escaped_dn:
                 new_rdn = self.build_rdn(self.rdn_value, escape_chars=True)
                 conn = connections[using]
                 with conn.wrap_database_errors, conn.cursor() as cursor:
@@ -153,6 +155,11 @@ class LDAPModel(django_models.Model):
         pk_field = cls._meta.pk
         if escape_chars:
             rdn_value = escape_ldap_dn_chars(rdn_value)
+
+        # sanity check to prevent injections via NUL byte
+        if rdn_value.find('\x00') != -1:
+            raise ValidationError('RDN value cannot contain NUL bytes')
+
         return f'{pk_field.column}={rdn_value}'
 
     @property
@@ -168,10 +175,19 @@ class LDAPModel(django_models.Model):
     def escaped_dn(self) -> str:
         """
         Extract rdn from dn, escape it, and rebuild dn
-        """
-        dn_parts = ldap.dn.str2dn(self.dn)
-        rdn_attr, rdn_val, _ = dn_parts[0][0]  # this might break when the DN has multiple RDNs
-        return self.build_dn(rdn_val, escape_chars=True)
 
-    def build_dn_from_pk(self, escape_chars: bool = True):
+        Note: Cannot use str2dn here because self.dn is unencoded.
+        If the DN contains a special char, it just breaks since str2dn cannot explode it.
+
+        But: We can just get the correct RDN by stripping the configured base_dn.
+        """
+        rdn = self.dn.replace(f',{self.base_dn}', '').split('=', 1)[-1]
+        return self.build_dn(rdn, escape_chars=True)
+
+    def build_dn_from_pk(self, escape_chars: bool = True) -> str:
+        """
+        Build the DN from the *current* PK value.
+        When changing the primary key (renaming), "self.dn" still contains the old DN.
+        To build the new DN, we need to build it from the current PK value.
+        """
         return self.build_dn(self.rdn_value, escape_chars)

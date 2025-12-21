@@ -411,9 +411,6 @@ class SQLInsertCompiler(compiler.SQLInsertCompiler, SQLCompiler):
         db = self.connection
         ldap_conn = self._get_ldap_conn()
 
-        # Set obj.dn only for representation in django space.
-        obj.dn = obj.build_dn_from_pk(escape_chars=False)
-
         # DN to use for LDAP operation
         dn = obj.build_dn_from_pk(escape_chars=True)
 
@@ -440,6 +437,9 @@ class SQLInsertCompiler(compiler.SQLInsertCompiler, SQLCompiler):
         with self.connection.wrap_database_errors:
             # make sure any exceptions bubble up as proper Django errors
             ldap_conn.add_s(dn, add.as_modlist())
+
+        # Set obj.dn only for representation in django space.
+        obj.dn = obj.build_dn_from_pk(escape_chars=False)
 
         return []  # Django does not care about the return value of execute_sql() for INSERTs
 
