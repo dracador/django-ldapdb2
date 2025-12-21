@@ -1,20 +1,24 @@
-from random import choice
+import uuid
 
 from faker import Faker
 
 from example.models import LDAPGroup, LDAPUser
 
 
+def randomize_string(string: str) -> str:
+    return f'{string}-{uuid.uuid4().hex}'
+
+
 def generate_random_group_name() -> str:
     fake = Faker()
-    return f'{fake.name()}-{choice(range(1000))}'
+    return randomize_string(fake.name())
 
 
 def generate_random_username() -> str:
     fake = Faker()
     first_name = fake.first_name()
     last_name = fake.last_name()
-    return f'{first_name.lower()}.{last_name.lower()}-{choice(range(1000))}'
+    return randomize_string(f'{first_name.lower()}.{last_name.lower()}')
 
 
 def create_random_ldap_group(model_cls=LDAPGroup, do_not_create: bool = False, **kwargs) -> LDAPGroup:
@@ -38,7 +42,7 @@ def create_random_ldap_user(model_cls=LDAPUser, do_not_create: bool = False, **k
     fake = Faker()
     first_name = fake.first_name()
     last_name = fake.last_name()
-    username = f'{first_name.lower()}.{last_name.lower()}-{choice(range(1000))}'
+    username = randomize_string(f'{first_name.lower()}.{last_name.lower()}')
     default_kwargs = {
         # dn=f'uid={username},ou=Users,dc=example,dc=org',
         'first_name': first_name,

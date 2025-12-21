@@ -1,11 +1,9 @@
-from random import choice
-
 from django.core.exceptions import ValidationError
 from ldapdb.models.fields import CharField
 
 from example.models import BaseLDAPUser
 from example.tests.base import LDAPTestCase
-from example.tests.generator import create_random_ldap_user
+from example.tests.generator import create_random_ldap_user, randomize_string
 
 
 class LDAPUserWithCNAsPK(BaseLDAPUser):
@@ -19,7 +17,7 @@ class FunkyRDNTestCase(LDAPTestCase):
         # Note: "#" is a special case, in that it only needs to be escaped at the start of an RDN
         dn_special_chars = ['\\', ',', '#', '+', '<', '>', ';', '"', '=']
 
-        username = '#kläüßgonzález' + ''.join(dn_special_chars) + str(choice(range(1000)))
+        username = randomize_string('#kläüßgonzález' + ''.join(dn_special_chars))
         user = create_random_ldap_user(username=username)
         self.assertEqual(user.username, username)
         self.assertEqual(f'uid={username},ou=Users,dc=example,dc=org', user.dn)
