@@ -4,9 +4,12 @@ from datetime import date, datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 from zoneinfo import ZoneInfo
 
+from django.conf import settings
 from django.core import checks
 from django.core.exceptions import FieldError
 from django.db.models import Lookup, fields as django_fields
+from django.utils import timezone as dt_tz
+from django.utils.dateparse import parse_datetime
 from django.utils.timezone import is_naive
 
 from ldapdb.typing_compat import override
@@ -340,10 +343,10 @@ def parse_generalized_time(s: str) -> datetime:
 
 def format_generalized_time(dt: date | datetime, include_tz: bool = False) -> str:
     if isinstance(dt, date) and not isinstance(dt, datetime):
-        dt = datetime(year=dt.year, month=dt.month, day=dt.day)
+        dt = datetime(year=dt.year, month=dt.month, day=dt.day, tzinfo=ZoneInfo('UTC'))
 
     if dt.tzinfo is None:
-        dt = dt.astimezone(ZoneInfo('UTC'))
+        dt = dt.replace(tzinfo=ZoneInfo('UTC'))
 
     if include_tz:
         return dt.strftime('%Y%m%d%H%M%S%z')
@@ -366,6 +369,10 @@ class DateTimeField(LDAPField, django_fields.DateTimeField):
             return None
 
         dt = parse_generalized_time(value)
+
+        if not settings.USE_TZ:
+            dt = dt_tz.make_naive(dt, dt_tz.get_default_timezone())
+
         return dt
 
     def get_prep_value(self, value: str | datetime) -> str | None:
@@ -373,10 +380,12 @@ class DateTimeField(LDAPField, django_fields.DateTimeField):
             return None
 
         if isinstance(value, str):
-            value = datetime.strptime(value, self.date_format)
+            # Use Django's parser which handles ISO strings with/without TZ instead of strict strptime(..., '%z')
+            parsed = parse_datetime(value)
+            value = parsed if parsed is not None else datetime.strptime(value, self.date_format)
 
         if isinstance(value, datetime) and is_naive(value):
-            value = value.replace(tzinfo=ZoneInfo('UTC'))
+            value = dt_tz.make_aware(value, dt_tz.get_current_timezone())
 
         value = format_generalized_time(value, include_tz=self.include_tz)
         return value
