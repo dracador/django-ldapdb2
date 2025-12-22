@@ -118,9 +118,11 @@ class LDAPModelIterable(LDAPBaseIterable, ModelIterable):
 
     def _dict_to_output(self, row_dict: dict, *_) -> 'Model':
         model_cls = self.queryset.model
-        instance = model_cls()
-        instance.__dict__.update(row_dict)
-        return instance
+        return model_cls.from_db(
+            self.queryset.db,
+            list(row_dict.keys()),
+            list(row_dict.values()),
+        )
 
 
 class LDAPValuesIterable(LDAPBaseIterable, ValuesIterable):

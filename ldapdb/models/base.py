@@ -1,9 +1,11 @@
-from typing import TYPE_CHECKING
+from collections.abc import Collection
+from typing import TYPE_CHECKING, Any, Self
 
 import ldap
 from django.core.exceptions import ValidationError
 from django.db import DEFAULT_DB_ALIAS, NotSupportedError, connections, models as django_models
 from django.db.models import QuerySet
+from django.db.models.base import ModelState
 from django.db.models.sql import Query
 
 from ldapdb.backends.ldap.lib import LDAPScope, escape_ldap_dn_chars
@@ -126,6 +128,16 @@ class LDAPModel(django_models.Model):
                 self.dn = new_dn
 
         return super().save(*args, **kwargs)
+
+    @classmethod
+    def from_db(cls, db: str, field_names: Collection[str], values: Collection[Any]) -> Self:
+        instance = cls.__new__(cls)
+        instance.__dict__.update(dict(zip(field_names, values, strict=False)))
+
+        instance._state = ModelState()
+        instance._state.adding = False
+        instance._state.db = db
+        return instance
 
     @classmethod
     def _check_required_attrs(cls):
