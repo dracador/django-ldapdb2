@@ -394,10 +394,6 @@ class DateTimeField(LDAPField, django_fields.DateTimeField):
 class DateField(DateTimeField, django_fields.DateField):
     default_date_format = '%Y-%m-%d'
 
-    def __init__(self, *args, **kwargs):
-        kwargs['include_tz'] = False
-        super().__init__(*args, **kwargs)
-
     def from_db_value(self, *args, **kwargs):
         value: datetime = super().from_db_value(*args, **kwargs)
         if value is None:
