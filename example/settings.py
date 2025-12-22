@@ -38,7 +38,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'example',
-    'tests'
+    'tests',
 ]
 
 MIDDLEWARE = [
@@ -151,6 +151,10 @@ LOGGING = {
             'handlers': ['console'],
             'level': 'WARNING',
             'propagate': True,
+        },
+        'django': {
+            'level': 'DEBUG',
+            'handlers': ['console'],
         },
         'django.db.backends': {
             'level': 'DEBUG',
