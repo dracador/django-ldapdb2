@@ -17,7 +17,7 @@ from ldapdb.iterables import (
     LDAPValuesIterable,
     LDAPValuesListIterable,
 )
-from ldapdb.typing_compat import Self
+from ldapdb.typing_compat import Self, override
 from .fields import DistinguishedNameField
 
 if TYPE_CHECKING:
@@ -130,14 +130,17 @@ class LDAPModel(django_models.Model):
 
         return super().save(*args, **kwargs)
 
+    @override
     @classmethod
-    def from_db(cls, db: str, field_names: Collection[str], values: Collection[Any]) -> Self:
+    def from_db(cls, db: str, field_names: Collection[str], values: Collection[Any], fetch_mode: Any = None) -> Self:
         instance = cls.__new__(cls)
         instance.__dict__.update(dict(zip(field_names, values, strict=False)))
 
         instance._state = ModelState()
         instance._state.adding = False
         instance._state.db = db
+        if fetch_mode is not None:
+            instance._state.fetch_mode = fetch_mode
         return instance
 
     @classmethod
