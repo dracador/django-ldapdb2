@@ -1,5 +1,5 @@
 from collections.abc import Collection
-from typing import TYPE_CHECKING, Any, Self
+from typing import TYPE_CHECKING, Any
 
 import ldap
 from django.core.exceptions import ValidationError
@@ -17,6 +17,7 @@ from ldapdb.iterables import (
     LDAPValuesIterable,
     LDAPValuesListIterable,
 )
+from ldapdb.typing_compat import Self
 from .fields import DistinguishedNameField
 
 if TYPE_CHECKING:

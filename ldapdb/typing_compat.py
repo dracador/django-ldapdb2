@@ -2,8 +2,8 @@
 import sys
 
 if sys.version_info >= (3, 12):
-    from typing import override
+    from typing import Self, override
 else:
-    from typing_extensions import override
+    from typing_extensions import Self, override
 
-__all__ = ['override']
+__all__ = ['Self', 'override']

@@ -102,7 +102,7 @@ class SQLCompilerTestCase(LDAPTestCase):
         self.assertLDAPSearchIsEqual(queryset, expected_ldap_search)
 
     def test_ldapuser_filter_injection(self):
-        queryset = LDAPUser.objects.filter(username="*)(uid=*")
+        queryset = LDAPUser.objects.filter(username='*)(uid=*')
         expected_ldap_search = get_new_ldap_search(filterstr=r'(uid=\2a\29\28uid=\2a)')
         self.assertLDAPSearchIsEqual(queryset, expected_ldap_search)
 
@@ -121,7 +121,9 @@ class SQLCompilerTestCase(LDAPTestCase):
         self.assertEqual([(TEST_LDAP_USER_1.name,)], list(objs))
 
     def test_ldapuser_filter_only_values_list_flat(self):
-        objs = LDAPUser.objects.filter(username=TEST_LDAP_USER_1.username).only('username').values_list('name', flat=True)
+        objs = (
+            LDAPUser.objects.filter(username=TEST_LDAP_USER_1.username).only('username').values_list('name', flat=True)
+        )
         self.assertEqual([TEST_LDAP_USER_1.name], list(objs))
 
     def test_ldapuser_order_by(self):
