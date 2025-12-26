@@ -45,6 +45,7 @@ def create_random_ldap_user(model_cls=LDAPUser, do_not_create: bool = False, **k
     username = randomize_string(f'{first_name.lower()}.{last_name.lower()}')
     default_kwargs = {
         # dn=f'uid={username},ou=Users,dc=example,dc=org',
+        'password': 'password',
         'first_name': first_name,
         'last_name': last_name,
         'mail': f'{username}@example.com',

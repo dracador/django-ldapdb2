@@ -9,7 +9,9 @@ from ldapdb.models.fields import (
     DistinguishedNameField,
     EmailField,
     IntegerField,
+    LDAPPasswordAlgorithm,
     MemberField,
+    PasswordField,
     TextField,
     UpdateStrategy,
 )
@@ -24,6 +26,7 @@ class BaseLDAPUser(LDAPModel):
     object_classes = ['inetOrgPerson', 'organizationalPerson', 'x-extendedUser']
 
     username = CharField(db_column='uid', primary_key=True)
+    password = PasswordField(db_column='userPassword', algorithm=LDAPPasswordAlgorithm.ARGON2)
     name = CharField(db_column='cn')
     first_name = CharField(db_column='givenName', null=True)
     last_name = CharField(db_column='sn')

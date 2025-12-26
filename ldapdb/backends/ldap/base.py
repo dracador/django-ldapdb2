@@ -5,6 +5,7 @@ from django.db.backends.base.base import BaseDatabaseWrapper
 from django.db.backends.base.validation import BaseDatabaseValidation
 from django.db.backends.utils import CursorWrapper
 from django.utils.asyncio import async_unsafe
+from ldap.ldapobject import ReconnectLDAPObject
 
 from .client import DatabaseClient
 from .creation import DatabaseCreation
@@ -88,7 +89,7 @@ class DatabaseWrapper(BaseDatabaseWrapper):
             self.connect()
 
     @async_unsafe
-    def get_new_connection(self, conn_params=None):
+    def get_new_connection(self, conn_params=None) -> ReconnectLDAPObject:
         """Build a connection from its parameters."""
         if conn_params is None:
             conn_params = self.get_connection_params()

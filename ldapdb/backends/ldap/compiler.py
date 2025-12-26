@@ -422,7 +422,8 @@ class SQLInsertCompiler(compiler.SQLInsertCompiler, SQLCompiler):
             if field.primary_key:
                 continue
 
-            value = getattr(obj, field.attname)
+            value = self.pre_save_val(field, obj)
+
             if value is None:
                 continue
 

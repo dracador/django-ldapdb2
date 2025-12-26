@@ -1,5 +1,6 @@
 import enum
 import re
+from collections.abc import Callable
 from datetime import date, datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 from zoneinfo import ZoneInfo
@@ -11,12 +12,23 @@ from django.db.models import Lookup, fields as django_fields
 from django.utils import timezone as dt_tz
 from django.utils.dateparse import parse_datetime
 from django.utils.timezone import is_naive
+from passlib.exc import MissingBackendError
+from passlib.handlers.argon2 import argon2
+from passlib.hash import (
+    ldap_pbkdf2_sha256,
+    ldap_pbkdf2_sha512,
+    ldap_salted_sha1,
+    ldap_salted_sha256,
+    ldap_salted_sha512,
+    ldap_sha1,
+)
 
 from ldapdb.typing_compat import override
 from ldapdb.validators import validate_dn
 
 if TYPE_CHECKING:
     from ldapdb.backends.ldap.base import DatabaseWrapper
+    from ldapdb.models import LDAPModel
 
 
 class UpdateStrategy(str, enum.Enum):
@@ -268,6 +280,108 @@ class IntegerField(django_fields.IntegerField, LDAPField):
         if value is None:
             return value
         return int(value)
+
+
+class LDAPPasswordAlgorithm(str, enum.Enum):
+    ARGON2 = 'ARGON2'
+    PBKDF2_SHA256 = 'PBKDF2_SHA256'
+    PBKDF2_SHA512 = 'PBKDF2_SHA512'
+    SHA = 'SHA'
+    SSHA = 'SSHA'
+    SSHA256 = 'SSHA256'
+    SSHA512 = 'SSHA512'
+    PLAINTEXT = 'PLAINTEXT'  # should *never* be used, but we still want to support it
+
+
+LDAP_PASSWORD_HANDLERS = {
+    LDAPPasswordAlgorithm.SHA: ldap_sha1.hash,
+    LDAPPasswordAlgorithm.SSHA: ldap_salted_sha1.hash,
+    LDAPPasswordAlgorithm.SSHA256: ldap_salted_sha256.hash,
+    LDAPPasswordAlgorithm.SSHA512: ldap_salted_sha512.hash,
+    LDAPPasswordAlgorithm.PBKDF2_SHA256: ldap_pbkdf2_sha256.hash,
+    LDAPPasswordAlgorithm.PBKDF2_SHA512: ldap_pbkdf2_sha512.hash,
+    LDAPPasswordAlgorithm.ARGON2: lambda pw, **options: f'{{ARGON2}}{argon2.using(**options).hash(pw)}',
+    LDAPPasswordAlgorithm.PLAINTEXT: lambda pw, **_: pw,
+}
+
+
+class PasswordField(CharField):
+    """
+    A field for storing LDAP passwords.
+    It automatically hashes plain-text values on save but preserves existing hashes.
+    """
+
+    def __init__(
+        self,
+        *args,
+        algorithm: str | LDAPPasswordAlgorithm,
+        handler: Callable | None = None,
+        handler_opts: dict | None = None,
+        **kwargs,
+    ):
+        self.algorithm = algorithm
+        self.handler = handler
+        self.handler_opts = handler_opts or {}
+        super().__init__(*args, **kwargs)
+
+    def _check_installed_argon2(self) -> list[checks.Error]:
+        try:
+            argon2.get_backend()
+        except MissingBackendError:
+            return [
+                checks.Error(
+                    'No argon2 backend installed. '
+                    'Install it with `pip install django-ldapdb2[argon2] # or directly via argon2-cffi`.',
+                    hint='See https://argon2-cffi.readthedocs.io/en/stable/installation.html',
+                    obj=self,
+                    id='ldapdb.E002',
+                )
+            ]
+        return []
+
+    def check(self, **kwargs):
+        errors = super().check(**kwargs)
+        if str(self.algorithm) == LDAPPasswordAlgorithm.ARGON2.value:
+            errors.extend(self._check_installed_argon2())
+        return errors
+
+    @staticmethod
+    def generate_password_hash(password: str, algorithm: LDAPPasswordAlgorithm | str, **options) -> str:
+        handler = LDAP_PASSWORD_HANDLERS.get(algorithm)
+        if not handler:
+            raise ValueError(
+                f'No handler found for algorithm: {algorithm}. '
+                f'Supported algorithms: {", ".join(LDAP_PASSWORD_HANDLERS.keys())}.'
+                f'Or supply your own handler via the `handler` argument.'
+            )
+
+        # Note: Support for passing settings via .hash() will be removed in Passlib 2.0.
+        # Since we're not sure about the future of passlib, we'll keep it as-is for now.
+        return handler(password, **options)
+
+    def _hash_if_needed(self, value: str) -> str:
+        if value and not value.startswith('{'):
+            if self.handler:
+                return self.handler(value, **self.handler_opts)
+            return self.generate_password_hash(value, self.algorithm, **self.handler_opts)
+        return value
+
+    @override
+    def pre_save(self, model_instance: 'LDAPModel', add: bool):
+        """
+        Called just before the field value is sent to the database.
+        We use this to hash the plaintext and update the instance attribute.
+        """
+        value = getattr(model_instance, self.attname)
+
+        hashed_value = self._hash_if_needed(value)
+        if hashed_value != value:
+            setattr(model_instance, self.attname, hashed_value)
+        return hashed_value
+
+    def get_db_prep_save(self, value: str, connection: 'DatabaseWrapper'):
+        value = self._hash_if_needed(value)
+        return super().get_db_prep_save(value, connection)
 
 
 class MemberField(DistinguishedNameField):
