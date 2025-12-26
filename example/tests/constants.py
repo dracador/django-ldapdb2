@@ -12,6 +12,7 @@ THUMBNAIL_PHOTO_BYTES = base64.b64decode(THUMBNAIL_PHOTO_B64)
 
 TEST_LDAP_ADMIN_USER_1 = LDAPUser(
     dn='uid=admin,ou=Users,dc=example,dc=org',
+    password='adminpassword',
     username='admin',
     last_name='Admin',
     name='Admin',
@@ -20,6 +21,7 @@ TEST_LDAP_ADMIN_USER_1 = LDAPUser(
 
 TEST_LDAP_USER_1 = LDAPUser(
     dn='uid=user1,ou=Users,dc=example,dc=org',
+    password='userpassword',
     first_name='User',
     last_name='One',
     mail='user.one@example.org',
@@ -32,6 +34,7 @@ TEST_LDAP_USER_1 = LDAPUser(
 
 TEST_LDAP_USER_2 = LDAPUser(
     dn='uid=user2,ou=Users,dc=example,dc=org',
+    password='user2password',
     first_name='User',
     last_name='Two',
     mail='user.two@example.org',

@@ -8,14 +8,30 @@ dependencies = [
     "Django>=4.2",           # https://docs.djangoproject.com/en/stable/releases/
     "python-ldap>=3.3",      # https://github.com/python-ldap/python-ldap/releases
     "typing-extensions ; python_version < '3.12'",
+    # "passlib" was the defacto standard library for handling encryption,
+    # but it's not actively maintained anymore: https://foss.heptapod.net/python-libs/passlib/-/issues/187
+    # "libpass" is a preliminary fork with some fixes applied.
+    # See discussion here: https://github.com/notypecheck/passlib/issues/11
+    # It's apparently now used in Gentoo and OpenBSD. Ansible uses the C implementation of crypt/libxcrypt via ctypes.
+    # I think it's best to use the mentioned fork but pin the version so that we minimize a supply-chain attack.
+    # When updating the package in the future, check the code and see if there are alternatives then.
+    "libpass==1.9.3",
 ]
+
+[optional-dependencies]
+argon2 = ['argon2-cffi']
 
 [dependency-groups]
 dev = [
     "django-stubs",
     "faker>=30.8.1",
     "ruff",
+
+    # used only for Sentry integration tests
     "sentry-sdk[django]",
+
+    # used only for PasswordField tests
+    "argon2-cffi",
 ]
 
 ######################################################################################
