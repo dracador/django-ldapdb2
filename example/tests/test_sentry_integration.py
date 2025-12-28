@@ -19,7 +19,6 @@ class TestSentryIntegration(LDAPTestCase):
             dsn='http://public@example.com/1',
             integrations=[DjangoIntegration()],
             traces_sample_rate=1.0,
-            enable_tracing=True,
             debug=True,
         )
 
