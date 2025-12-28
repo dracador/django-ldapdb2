@@ -41,8 +41,8 @@ class PasswordFieldModelWithCustomHandlerOptionsPBKDF2(BaseLDAPTestUser):
     )
 
 
-ARGON_RE = r'^\{ARGON2\}\$argon2(?:id|i|d)\$v=\d+\$m=(?P<m>\d+),t=(?P<t>\d+),p=(?P<p>\d+)\$'
-PBKDF2_SHA512_RE = r'^\{PBKDF2-SHA512\}(?P<rounds>\d+)\$(?P<salt>[a-zA-Z0-9+/]+)\$.*$'
+ARGON_RE = re.compile(r'^\{ARGON2}\$argon2(?:id|i|d)\$v=\d+\$m=(?P<m>\d+),t=(?P<t>\d+),p=(?P<p>\d+)\$')
+PBKDF2_SHA512_RE = re.compile(r'^\{PBKDF2-SHA512}(?P<rounds>\d+)\$(?P<salt>[a-zA-Z0-9+/.]+)\$.*$')
 
 
 def get_dynamic_password_model(algorithm: LDAPPasswordAlgorithm) -> type[PasswordFieldModelForAlgorithm]:
@@ -132,7 +132,7 @@ class PasswordFieldTests(LDAPTestCase):
         self.assertSuccessfulBind(instance.dn, password)
 
         expected = {'m': str(_ARGON2_MEMORY_COST), 'p': str(_ARGON2_PARALLELISM), 't': str(_ARGON2_ROUNDS)}
-        match = re.match(ARGON_RE, instance.password).groupdict()
+        match = ARGON_RE.match(instance.password).groupdict()
         self.assertDictEqual(expected, match)
 
     def test_password_field_custom_handler_options_pbkdf2(self):
@@ -142,7 +142,7 @@ class PasswordFieldTests(LDAPTestCase):
         )
         self.assertSuccessfulBind(instance.dn, password)
 
-        match = re.match(PBKDF2_SHA512_RE, instance.password).group('rounds')
+        match = PBKDF2_SHA512_RE.match(instance.password).group('rounds')
         self.assertEqual(str(_PBKDF2_ROUNDS), match)
 
     def test_password_field_pre_save_hash(self):
