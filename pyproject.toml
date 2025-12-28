@@ -1,6 +1,6 @@
 [project]
 name = "django-ldapdb2"
-version = "0.1.0"
+version = "0.1.1"
 description = "LDAP database backend for Django"
 readme = "README.md"
 requires-python = ">=3.10"
