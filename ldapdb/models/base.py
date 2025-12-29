@@ -1,5 +1,5 @@
 from collections.abc import Collection
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 import ldap
 from django.core.exceptions import ValidationError
@@ -18,9 +18,11 @@ from ldapdb.iterables import (
     LDAPValuesListIterable,
 )
 from ldapdb.typing_compat import Self, override
-from .fields import DistinguishedNameField
+from .fields import DistinguishedNameField, PasswordField
 
 if TYPE_CHECKING:
+    from django.db.models.options import Options
+
     from ldapdb.backends.ldap import LDAPSearch
 
 
@@ -207,3 +209,46 @@ class LDAPModel(django_models.Model):
         To build the new DN, we need to build it from the current PK value.
         """
         return self.build_dn(self.rdn_value, escape_chars)
+
+
+class PasswordMixinProtocol(Protocol):
+    _meta: 'Options'
+
+    def _get_password_field(self, name: str | None) -> 'PasswordField': ...
+
+
+class LDAPPasswordMixin:
+    """
+    Mixin for LDAPModels to provide a set_password API with automatic field discovery.
+    Imitates the default django behaviour for User models.
+    When updating PasswordFields, we automatically convert them to the correct format in pre_save and get_db_prep_save.
+    However, libraries like django-auditlog catch the raw password before pre_save is called.
+    We should encourage users to use set_password instead of directly setting the password attribute.
+    """
+
+    def _get_password_field(self: 'PasswordMixinProtocol', name: str | None) -> 'PasswordField':
+        if name:
+            return cast('PasswordField', self._meta.get_field(name))
+
+        password_fields = [f for f in self._meta.fields if isinstance(f, PasswordField)]
+        if not password_fields:
+            raise ValueError(f'No PasswordField found on {self.__class__.__name__}.')
+
+        if len(password_fields) > 1:
+            field_names = [f.name for f in password_fields]
+            raise ValueError(
+                f'Multiple PasswordFields found ({", ".join(field_names)}). Please specify field_name explicitly.'
+            )
+
+        return password_fields[0]
+
+    def set_password(self: 'PasswordMixinProtocol', raw_password: str, field_name: str | None = None) -> None:
+        """
+        Hashes and sets the password. If field_name is None, it automatically
+        finds the PasswordField on the model.
+        """
+        from ldapdb.models.fields import PasswordField
+
+        field = self._get_password_field(field_name)
+        hashed = PasswordField.generate_password_hash(raw_password, field.algorithm, **field.handler_opts)
+        setattr(self, field.attname, hashed)

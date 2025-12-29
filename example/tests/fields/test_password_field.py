@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, cast
 
 import ldap
 from django.db import connections
+from ldapdb.models.base import LDAPPasswordMixin
 from ldapdb.models.fields import LDAPPasswordAlgorithm, PasswordField
 
 from example.tests.base import BaseLDAPTestUser, LDAPTestCase
@@ -14,7 +15,7 @@ if TYPE_CHECKING:
     from ldapdb.backends.ldap.cursor import DatabaseCursor
 
 
-class PasswordFieldModelForAlgorithm(BaseLDAPTestUser):
+class PasswordFieldModelForAlgorithm(LDAPPasswordMixin, BaseLDAPTestUser):
     password: PasswordField  # filled in get_dynamic_password_model()
 
     class Meta:
@@ -39,6 +40,11 @@ class PasswordFieldModelWithCustomHandlerOptionsPBKDF2(BaseLDAPTestUser):
     password = PasswordField(
         db_column='userPassword', algorithm=LDAPPasswordAlgorithm.PBKDF2_SHA512, handler_opts={'rounds': _PBKDF2_ROUNDS}
     )
+
+
+class PasswordFieldModelWithMultiPasswordField(LDAPPasswordMixin, BaseLDAPTestUser):
+    password = PasswordField(db_column='userPassword', algorithm=LDAPPasswordAlgorithm.SSHA512)
+    alt_password = PasswordField(db_column='description', algorithm=LDAPPasswordAlgorithm.ARGON2)
 
 
 ARGON_RE = re.compile(r'^\{ARGON2}\$argon2(?:id|i|d)\$v=\d+\$m=(?P<m>\d+),t=(?P<t>\d+),p=(?P<p>\d+)\$')
@@ -155,3 +161,32 @@ class PasswordFieldTests(LDAPTestCase):
         instance = model_cls.objects.create(username=generate_random_username(), password=password)
         self.assertSuccessfulBind(instance.dn, password)
         self.assertNotEqual(instance.password, password)
+
+    def test_set_password_automatic_discovery(self):
+        """Test that set_password() finds the field automatically when only one exists."""
+        password = str(secrets.token_hex(8))
+        algorithm = LDAPPasswordAlgorithm.SSHA512
+        model_cls = get_dynamic_password_model(algorithm)
+        instance = model_cls(username=generate_random_username())
+        instance.set_password(password)
+
+        self.assertTrue(instance.password.startswith('{SSHA512}'))
+
+        instance.save()
+        instance.refresh_from_db()
+        self.assertTrue(instance.password.startswith('{SSHA512}'))
+
+    def test_set_password_with_multi_fields(self):
+        password = str(secrets.token_hex(8))
+        user = PasswordFieldModelWithMultiPasswordField(username=generate_random_username(), password='')
+        user.set_password(password, field_name='password')
+        user.set_password('otherpassword', field_name='alt_password')
+
+        self.assertTrue(user.password.startswith('{SSHA512}'))
+        self.assertTrue(user.alt_password.startswith('{ARGON2}'))
+
+    def test_set_password_with_multi_fields_not_specified(self):
+        password = str(secrets.token_hex(8))
+        user = PasswordFieldModelWithMultiPasswordField(username=generate_random_username(), password='')
+        with self.assertRaises(ValueError):
+            user.set_password(password)
