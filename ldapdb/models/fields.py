@@ -250,7 +250,7 @@ class BinaryField(django_fields.BinaryField, LDAPField):
 class BooleanField(django_fields.BooleanField, LDAPField):
     """
     LDAP stores boolean values as 'TRUE' and 'FALSE'.
-    Returns True if field is 'TRUE', None if field.null=True and 'FALSE' otherwise.
+    Returns True if field is 'TRUE', None if field.null=True, and 'FALSE' otherwise.
     Default value is None if field.null=True but can be overridden by setting default=True or False.
     """
 
@@ -505,19 +505,28 @@ class DateTimeField(LDAPField, django_fields.DateTimeField):
         return value
 
 
-class DateField(DateTimeField, django_fields.DateField):
-    default_date_format = '%Y-%m-%d'
+class DateField(LDAPField, django_fields.DateField):
+    """
+    LDAP-specific DateField that handles LDAP GeneralizedTime strings and normalizes to date objects.
+    We keep this seperate from DateTimeField because some integration check the field type via isinstance().
+    """
 
-    def from_db_value(self, *args, **kwargs):
-        value: datetime = super().from_db_value(*args, **kwargs)
+    def from_db_value(self, *args, **kwargs) -> date | None:
+        value: str = super().from_db_value(*args, **kwargs)
         if value is None:
             return None
-        return value.date()
 
-    def get_prep_value(self, value: str | date | datetime):
+        dt = parse_generalized_time(value)
+        return dt.date()
+
+    def get_prep_value(self, value: str | date | datetime) -> str | None:
         if value is None:
             return None
 
+        # Ensure we have a date object
+        if isinstance(value, str):
+            value = self.to_python(value)
         if isinstance(value, datetime):
-            value = date(year=value.year, month=value.month, day=value.day)
-        return super().get_prep_value(value)
+            value = value.date()
+
+        return format_generalized_time(value, include_tz=False)
