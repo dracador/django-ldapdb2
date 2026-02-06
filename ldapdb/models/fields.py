@@ -156,6 +156,23 @@ class LDAPField(django_fields.Field, RenderLookupProtocol):
             self.run_validators(value)
         return value
 
+    def deconstruct(self):
+        name, path, args, kwargs = super().deconstruct()
+
+        kwargs['db_column'] = self.db_column
+        if self.ordering_rule is not None:
+            kwargs['ordering_rule'] = self.ordering_rule
+        if hasattr(self, 'hidden') and self.hidden:
+            kwargs['hidden'] = self.hidden
+        if self.multi_valued_field:
+            kwargs['multi_valued_field'] = self.multi_valued_field
+        if self.update_strategy != UpdateStrategy.REPLACE:
+            kwargs['update_strategy'] = self.update_strategy
+        if self.read_only:
+            kwargs['read_only'] = self.read_only
+
+        return name, path, args, kwargs
+
     @override
     def get_db_prep_value(self, value: Any, connection: 'DatabaseWrapper', prepared: bool = False):
         """Prepare a value for DB interaction.
@@ -344,6 +361,17 @@ class PasswordField(CharField):
         if str(self.algorithm) == LDAPPasswordAlgorithm.ARGON2.value:
             errors.extend(self._check_installed_argon2())
         return errors
+
+    def deconstruct(self):
+        name, path, args, kwargs = super().deconstruct()
+
+        kwargs['algorithm'] = self.algorithm
+        if self.handler:
+            kwargs['handler'] = self.handler
+        if self.handler_opts:
+            kwargs['handler_opts'] = self.handler_opts
+
+        return name, path, args, kwargs
 
     @staticmethod
     def generate_password_hash(password: str, algorithm: LDAPPasswordAlgorithm | str, **options) -> str:
