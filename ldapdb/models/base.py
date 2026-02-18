@@ -8,7 +8,7 @@ from django.db.models import QuerySet
 from django.db.models.base import ModelState
 from django.db.models.sql import Query
 
-from ldapdb.backends.ldap.lib import LDAPScope, escape_ldap_dn_chars
+from ldapdb.backends.ldap.lib import LDAPScope, escape_ldap_rdn_chars
 from ldapdb.exceptions import LDAPModelTypeError
 from ldapdb.iterables import (
     LDAPFlatValuesListIterable,
@@ -172,7 +172,7 @@ class LDAPModel(django_models.Model):
     def build_rdn(cls, rdn_value: str, escape_chars: bool = True) -> str:
         pk_field = cls._meta.pk
         if escape_chars:
-            rdn_value = escape_ldap_dn_chars(rdn_value)
+            rdn_value = escape_ldap_rdn_chars(rdn_value)
 
         # sanity check to prevent injections via NUL byte
         if rdn_value.find('\x00') != -1:
