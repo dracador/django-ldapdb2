@@ -6,7 +6,12 @@ from ldapdb.models.fields import DistinguishedNameField, MemberField, UpdateStra
 from example.models import BaseLDAPGroup, LDAPGroup, LDAPUser
 from example.tests.base import LDAPTestCase
 from example.tests.constants import TEST_LDAP_GROUP_1
-from example.tests.generator import create_random_ldap_group, generate_random_group_name
+from example.tests.generator import (
+    create_random_ldap_group,
+    create_random_ldap_user,
+    generate_random_group_name,
+    generate_random_username,
+)
 
 
 class LDAPGroupWithAddDeleteStrategyMemberField(BaseLDAPGroup):
@@ -163,3 +168,26 @@ class MemberFieldTestCase(LDAPTestCase):
             instance.custom_members,
             [],
         )
+
+    def test_group_member_with_special_char_dn(self):
+        """
+        Test that a DN containing special characters (which requires escaping on the wire)
+        can be added to a MemberField and retrieved correctly.
+        """
+        user = create_random_ldap_user(username=f'{generate_random_username()}+membertest')
+        user.refresh_from_db()
+
+        name = generate_random_group_name()
+        group = create_random_ldap_group(
+            name=name,
+            do_not_create=True,
+            members=[
+                user.dn,
+            ],
+        )
+        group.full_clean()
+        group.save()
+        group.refresh_from_db()
+
+        self.assertIn('+', user.dn)  # user.dn should contain the unescaped character
+        self.assertIn(user.dn, group.members)

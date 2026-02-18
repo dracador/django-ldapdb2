@@ -192,7 +192,7 @@ LDAP_ESCAPE_RE = re.compile(r'[\\,#+<>;\"=]')
 LDAP_UNESCAPE_RE = re.compile(r'\\([0-9a-fA-F]{2})')
 
 
-def escape_ldap_dn_chars(value: str) -> str:
+def escape_ldap_rdn_chars(value: str) -> str:
     """
     Returns a string with all LDAP special characters escaped per RFC 4514.
     Using ldap.dn.escape_dn_chars" results in strings not being escaped as hexadecimal,
@@ -201,6 +201,22 @@ def escape_ldap_dn_chars(value: str) -> str:
     Note: "#" only has to be escaped when it's at the start or end of an RDN (for openLDAP at least).
     """
     return LDAP_ESCAPE_RE.sub(lambda m: f"\\{ord(m.group()):02X}", value)
+
+
+def escape_ldap_dn_chars(value: str):
+    """
+    Does basically the same thing as escape_ldap_rdn_chars, but for DNs by splitting the string at commas.
+    """
+    rdns = value.split(',')
+    escaped_rdns = []
+    for rdn in rdns:
+        if '=' in rdn:
+            attr, val = rdn.split('=', 1)
+            escaped_val = escape_ldap_rdn_chars(val)
+            escaped_rdns.append(f'{attr}={escaped_val}')
+        else:
+            escaped_rdns.append(rdn)
+    return ','.join(escaped_rdns)
 
 
 def unescape_ldap_dn_chars(value: str) -> str:

@@ -14,15 +14,18 @@ from django.utils.dateparse import parse_datetime
 from django.utils.timezone import is_naive
 from passlib.exc import MissingBackendError
 from passlib.handlers.argon2 import argon2
-from passlib.hash import (
-    ldap_pbkdf2_sha256,
-    ldap_pbkdf2_sha512,
+from passlib.handlers.ldap_digests import (
     ldap_salted_sha1,
     ldap_salted_sha256,
     ldap_salted_sha512,
     ldap_sha1,
 )
+from passlib.handlers.pbkdf2 import (
+    ldap_pbkdf2_sha256,
+    ldap_pbkdf2_sha512,
+)
 
+from ldapdb.backends.ldap.lib import escape_ldap_dn_chars, unescape_ldap_dn_chars
 from ldapdb.typing_compat import override
 from ldapdb.validators import validate_dn
 
@@ -94,7 +97,7 @@ class LDAPField(django_fields.Field, RenderLookupProtocol):
             self.null = True
             self.read_only = read_only
 
-    def from_db_value(self, value, expression, connection):  # noqa: ARG002
+    def from_db_value(self, value, expression, connection) -> str | list[str] | None:  # noqa: ARG002
         if value is None:
             if self.null:
                 return value
@@ -174,7 +177,7 @@ class LDAPField(django_fields.Field, RenderLookupProtocol):
         return name, path, args, kwargs
 
     @override
-    def get_db_prep_value(self, value: Any, connection: 'DatabaseWrapper', prepared: bool = False):
+    def get_db_prep_value(self, value: Any, connection: 'DatabaseWrapper', prepared: bool = False) -> list[bytes | str]:
         """Prepare a value for DB interaction.
 
         Returns:
@@ -258,6 +261,23 @@ class DistinguishedNameField(CharField):
                 'or iterate over the results yourself.'
             )
         return super().get_lookup(lookup_name)
+
+    def from_db_value(self, value, expression, connection):
+        value = super().from_db_value(value, expression, connection)
+
+        if value is None:
+            return None
+
+        if isinstance(value, list):
+            return [unescape_ldap_dn_chars(v) for v in value]
+
+        return unescape_ldap_dn_chars(value)
+
+    def get_prep_value(self, value: str) -> str | None:
+        value = super().get_prep_value(value)
+        if not value:
+            return value
+        return escape_ldap_dn_chars(value)
 
 
 class BinaryField(django_fields.BinaryField, LDAPField):
