@@ -1,6 +1,10 @@
 import ldap
+from unittest.mock import MagicMock
+
 from django.core.exceptions import ValidationError
 from django.db import connections
+from django.test import TestCase
+
 from ldapdb.models.fields import DistinguishedNameField, MemberField, UpdateStrategy
 
 from example.models import BaseLDAPGroup, LDAPGroup, LDAPUser
@@ -191,3 +195,23 @@ class MemberFieldTestCase(LDAPTestCase):
 
         self.assertIn('+', user.dn)  # user.dn should contain the unescaped character
         self.assertIn(user.dn, group.members)
+
+
+class MemberFieldUnitTests(TestCase):
+    def setUp(self):
+        self.connection = MagicMock()
+        self.connection.charset = 'utf-8'
+
+    def test_from_db_value_none_returns_empty_list(self):
+        field = MemberField(db_column='member', default='dc=example,dc=org')
+        result = field.from_db_value(None, None, self.connection)
+        self.assertEqual(result, [])
+
+    def test_from_db_value_filters_out_default_placeholder(self):
+        field = MemberField(db_column='member', default='dc=example,dc=org')
+        result = field.from_db_value(
+            [b'uid=user1,ou=Users,dc=example,dc=org', b'dc=example,dc=org'],
+            None,
+            self.connection,
+        )
+        self.assertEqual(result, ['uid=user1,ou=Users,dc=example,dc=org'])

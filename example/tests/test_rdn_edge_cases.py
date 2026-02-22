@@ -1,7 +1,7 @@
 from django.core.exceptions import ValidationError
 from ldapdb.models.fields import CharField
 
-from example.models import BaseLDAPUser
+from example.models import BaseLDAPUser, LDAPUser
 from example.tests.base import LDAPTestCase
 from example.tests.generator import create_random_ldap_user, randomize_string
 
@@ -67,3 +67,16 @@ class FunkyRDNTestCase(LDAPTestCase):
             user = create_random_ldap_user(do_not_create=True)
             user.username = user.username + '\x00'
             user.save()
+
+    def test_escaped_dn_raises_for_mismatched_base_dn(self):
+        user = LDAPUser.__new__(LDAPUser)
+        user.dn = 'uid=foo,ou=OtherOU,dc=example,dc=org'
+        with self.assertRaises(ValueError):
+            _ = user.escaped_dn
+
+    def test_escaped_dn_works_for_matching_base_dn(self):
+        user = LDAPUser.__new__(LDAPUser)
+        user.dn = 'uid=foo,ou=Users,dc=example,dc=org'
+        escaped = user.escaped_dn
+        self.assertIn('foo', escaped)
+        self.assertIn(LDAPUser.base_dn, escaped)

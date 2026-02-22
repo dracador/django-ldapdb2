@@ -162,7 +162,9 @@ class SQLCompiler(BaseSQLCompiler):
         operator_format, _ = LDAP_OPERATORS.get(lookup_type, (None, None))
 
         if lookup_type == 'in':
-            values = ''.join([f'({field_name}={escape_filter_chars(v)})' for v in rhs])
+            if not rhs:
+                return '(!(objectClass=*))'
+            values = ''.join([f'({field_name}={escape_filter_chars(str(v))})' for v in rhs])
             ldap_filter = f'(|{values})'
             logger.debug("Generated LDAP filter for 'in' lookup: %s", ldap_filter)
             return ldap_filter
@@ -178,7 +180,7 @@ class SQLCompiler(BaseSQLCompiler):
                 raise NotImplementedError(f'Unsupported lookup type: {lookup_type}')
             parts = []
             for v in rhs:
-                escaped_value = escape_filter_chars(v)
+                escaped_value = escape_filter_chars(str(v))
                 parts.append(f'({field_name}{operator_format % escaped_value})')
             ldap_filter = f'(|{"".join(parts)})'
             logger.debug(
@@ -188,7 +190,7 @@ class SQLCompiler(BaseSQLCompiler):
             )
             return ldap_filter
         elif operator_format:
-            escaped_value = escape_filter_chars(rhs)
+            escaped_value = escape_filter_chars(str(rhs))
             ldap_filter = f'({field_name}{operator_format % escaped_value})'
             logger.debug("Generated LDAP filter for lookup '%s': %s", lookup_type, ldap_filter)
             return ldap_filter

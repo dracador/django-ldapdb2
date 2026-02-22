@@ -199,7 +199,10 @@ class LDAPModel(django_models.Model):
 
         But: We can just get the correct RDN by stripping the configured base_dn.
         """
-        rdn = self.dn.replace(f',{self.base_dn}', '').split('=', 1)[-1]
+        suffix = f',{self.base_dn}'
+        if not self.dn.endswith(suffix):
+            raise ValueError(f'DN {self.dn!r} does not end with base_dn {self.base_dn!r}')
+        rdn = self.dn[: -len(suffix)].split('=', 1)[-1]
         return self.build_dn(rdn, escape_chars=True)
 
     def build_dn_from_pk(self, escape_chars: bool = True) -> str:

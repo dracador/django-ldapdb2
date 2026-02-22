@@ -97,17 +97,21 @@ def eval_expr(expr: Expression, instance):  # noqa: PLR0911
         #            return s[-length:]
 
         case Concat():
-            parts = [eval_expr(p, instance) or '' for p in expr.source_expressions]
+            parts = ['' if (v := eval_expr(p, instance)) is None else str(v) for p in expr.source_expressions]
             return ''.join(parts)
 
         case Repeat():
             s = eval_expr(expr.source_expressions[0], instance) or ''
             number = eval_expr(expr.source_expressions[1], instance)
+            if number is None:
+                return None
             return s * number
 
         case Replace():
             s, old, new = (eval_expr(p, instance) for p in expr.source_expressions)
-            return s.replace(old, new) if s is not None else None
+            if s is None or old is None:
+                return None
+            return s.replace(old, new if new is not None else '')
 
         case Abs() | Round():
             num = eval_expr(expr.source_expressions[0], instance)

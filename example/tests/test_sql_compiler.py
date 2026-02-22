@@ -6,46 +6,6 @@ from .constants import TEST_LDAP_ADMIN_USER_1, TEST_LDAP_AVAILABLE_USERS, TEST_L
 
 
 class SQLCompilerTestCase(LDAPTestCase):
-    """
-    TODO: Implement the following test cases:
-    --- Basic ---
-    X LDAPUser.objects.all()
-    X LDAPUser.objects.get(username='user1')
-    X LDAPUser.objects.all().exists()
-    X LDAPUser.objects.filter(uid='test')
-    X LDAPUser.objects.filter(uid__lookup='test')
-    X LDAPUser.objects.filter(uid__in=['test1', 'test2'])
-    LDAPUser.objects.filter(uid__datetimelookup__transform='test') - optional (see comment in features.py)
-    X LDAPUser.objects.filter(cn__contains='test').exclude(uid='specific_user')
-
-    --- Hidden DN Field handling ---
-    LDAPUser.objects.get(dn='uid=admin,dc=example,dc=com').dn
-
-    --- Ordering ---
-    X LDAPUser.objects.all().order_by('uid')
-    LDAPUser.objects.all().order_by('dn') - optional, since we'd have to implement custom sorting for this
-
-    --- Values ---
-    X LDAPUser.objects.all().values('uid', 'cn')
-
-    --- Aggregation ---
-    X LDAPUser.objects.all().count()
-    LDAPUser.objects.aggregate(Count('uid'))
-
-    --- Annotation ---
-    LDAPUser.objects.annotate(num_uids=Count('uid'))
-
-    --- Q queries ---
-    LDAPUser.objects.filter(Q(uid='test') & Q(uid='test2'))
-    LDAPUser.objects.filter(Q(uid='test') | Q(uid='test2'))
-    LDAPUser.objects.filter(~Q(uid='test'))
-    LDAPUser.objects.filter(Q(uid='test') & ~Q(uid='test2'))
-    LDAPUser.objects.filter(Q(uid='test') | ~Q(uid='test2'))
-
-    --- Deferred fields ---
-    LDAPUser.objects.defer('cn').get(uid='test').cn
-    """
-
     def test_ldapgroup_get(self):
         obj = self._get_group_1_object()
         self.assertLDAPModelObjectsAreEqual(TEST_LDAP_GROUP_1, obj)
@@ -238,3 +198,17 @@ class SQLCompilerTestCase(LDAPTestCase):
         obj.name = 'New name'  # Note: Setting the primary key to something else will result in a DoesNotExist error
         obj.refresh_from_db()
         self.assertLDAPModelObjectsAreEqual(TEST_LDAP_USER_1, obj)
+
+    def test_integer_field_in_lookup_with_integer_values(self):
+        results = list(LDAPUser.objects.filter(department_number__in=[1]))
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].username, TEST_LDAP_USER_1.username)
+
+    def test_integer_field_in_lookup_empty_list(self):
+        results = list(LDAPUser.objects.filter(department_number__in=[]))
+        self.assertEqual(results, [])
+
+    def test_integer_field_scalar_lookup(self):
+        results = list(LDAPUser.objects.filter(department_number=1))
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].username, TEST_LDAP_USER_1.username)

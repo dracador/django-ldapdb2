@@ -1,5 +1,7 @@
 from functools import cached_property
 
+from django.core.exceptions import ImproperlyConfigured
+
 from .exceptions import MultipleLDAPDatasesError
 from .models import LDAPModel
 
@@ -13,6 +15,8 @@ class Router:
 
     @property
     def default_database(self):
+        if not self.ldap_databases:
+            raise ImproperlyConfigured('No LDAP database backend configured.')
         if len(self.ldap_databases) > 1:
             raise MultipleLDAPDatasesError()
         return self.ldap_databases[0]
