@@ -8,6 +8,7 @@ services:
     volumes:
       - './ldifs:/ldifs'
       - './schema/:/schema'
+      - './slapd.conf:/etc/ldap/slapd.conf:ro'
       - type: tmpfs
         target: /var/lib/ldap
     ulimits:
