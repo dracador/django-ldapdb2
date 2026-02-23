@@ -1,9 +1,11 @@
+import functools
 import json
 import logging
 from typing import TYPE_CHECKING
 
 import ldap
 from django.db.models import Count
+from ldap.controls import SimplePagedResultsControl
 from ldap.controls.sss import SSSRequestControl
 from ldap.controls.vlv import VLVRequestControl
 
@@ -16,6 +18,50 @@ if TYPE_CHECKING:
     from ldap.ldapobject import ReconnectLDAPObject
 
 logger = logging.getLogger(__name__)
+
+
+def _sort_and_slice_ldap_results(
+    results: list[tuple[str, dict]],
+    ordering_rules: list[tuple[str, str]],
+    offset: int,
+    limit: int,
+) -> list[tuple[str, dict]]:
+    """
+    Sort and slice a list of raw LDAP results in Python.
+
+    Used as a fallback when the server does not support SSSVLV. Ordering rule OIDs
+    are ignored — sorting is lexicographic on the raw bytes value, which is correct
+    for string attributes but not for numeric or language-specific ordering rules.
+    """
+    if ordering_rules:
+        def _compare(a: tuple[str, dict], b: tuple[str, dict]) -> int:
+            dn_a, attrs_a = a
+            dn_b, attrs_b = b
+            for attrname, _ in ordering_rules:
+                descending = attrname.startswith('-')
+                attr = attrname.lstrip('-')
+                if attr == 'dn':
+                    val_a = dn_a.encode() if isinstance(dn_a, str) else dn_a
+                    val_b = dn_b.encode() if isinstance(dn_b, str) else dn_b
+                else:
+                    val_a = attrs_a.get(attr, [b''])[0] if attrs_a.get(attr) else b''
+                    val_b = attrs_b.get(attr, [b''])[0] if attrs_b.get(attr) else b''
+                if val_a < val_b:
+                    result = -1
+                elif val_a > val_b:
+                    result = 1
+                else:
+                    continue
+                return -result if descending else result
+            return 0
+
+        results = sorted(results, key=functools.cmp_to_key(_compare))
+
+    if offset or limit:
+        end = offset + limit if limit else None
+        results = results[offset:end]
+
+    return results
 
 
 class DatabaseCursor:
@@ -41,8 +87,9 @@ class DatabaseCursor:
     TODO: Implement a way to sort results in Python if SSS is not used.
     """
 
-    def __init__(self, connection):
+    def __init__(self, connection, settings_dict: dict | None = None):
         self.connection: ReconnectLDAPObject | None = connection
+        self.settings_dict: dict = settings_dict or {}
         self.query: LDAPQuery | None = None
         self.description = None
         self.rowcount = -1
@@ -104,6 +151,14 @@ class DatabaseCursor:
             self._result_iter = iter(self.results)
             return
 
+        if self.search_obj.control_type != LDAPSearchControlType.SSSVLV:
+            self.results = _sort_and_slice_ldap_results(
+                self.results,
+                self.search_obj.ordering_rules,
+                self.search_obj.offset,
+                self.search_obj.limit,
+            )
+
         self.set_description()
         self.format_results()
         self.rowcount = len(self.results)
@@ -120,7 +175,29 @@ class DatabaseCursor:
         )
 
     def _execute_with_simple_paging(self, timeout: int = -1):
-        raise NotImplementedError()
+        page_size = self.settings_dict.get('PAGE_SIZE', 1000)
+        cookie = b''
+        results = []
+        while True:
+            ctrl = SimplePagedResultsControl(criticality=True, size=page_size, cookie=cookie)
+            msgid = self.connection.search_ext(
+                base=self.search_obj.base,
+                scope=self.search_obj.scope,
+                filterstr=self.search_obj.filterstr,
+                attrlist=self.search_obj.attrlist_without_dn,
+                serverctrls=[ctrl],
+                timeout=timeout,
+            )
+            _rtype, rdata, _rmsgid, serverctrls = self.connection.result3(msgid)
+            results.extend(rdata)
+            paged_ctrl = next(
+                (c for c in serverctrls if c.controlType == SimplePagedResultsControl.controlType),
+                None,
+            )
+            if not paged_ctrl or not paged_ctrl.cookie:
+                break
+            cookie = paged_ctrl.cookie
+        return results
 
     def _execute_with_sssvlv(self, timeout: int = -1):
         serverctrls: list[RequestControl] = []

@@ -315,10 +315,6 @@ class SQLCompiler(BaseSQLCompiler):
             with_col_aliases=with_col_aliases or bool(self.query.combinator),
         )
 
-        # TODO: Handle slicing on Non-SSSVLV queries
-        if (self.query.low_mark or self.query.high_mark) and not self.connection.features.supports_sssvlv:
-            raise NotSupportedError('Slicing is not supported without VLV control.')
-
         self.query.annotation_aliases = self.annotation_aliases
         self.query.ldap_search = self._build_ldap_search(with_limits)
 
