@@ -116,7 +116,7 @@ class DatabaseWrapper(BaseDatabaseWrapper):
 
     @async_unsafe
     def create_cursor(self, *_args, **_kwargs):
-        return CursorWrapper(DatabaseCursor(self.connection), self)
+        return CursorWrapper(DatabaseCursor(self.connection, self.settings_dict), self)
 
     @async_unsafe
     def close(self):
