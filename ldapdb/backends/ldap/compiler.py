@@ -15,7 +15,7 @@ from ldap.filter import escape_filter_chars
 
 from ldapdb.exceptions import LDAPModelTypeError
 from ldapdb.models import LDAPModel, LDAPQuery
-from ldapdb.models.fields import UpdateStrategy
+from ldapdb.models.fields import PrimaryDistinguishedNameField, UpdateStrategy
 from .ldif_helpers import AddRequest, ModifyRequest
 from .lib import LDAPSearch, LDAPSearchControlType
 from .lookups import LDAP_OPERATORS
@@ -151,6 +151,11 @@ class SQLCompiler(BaseSQLCompiler):
         else:
             raise NotImplementedError(f'Unsupported lhs type: {type(lhs)}')
 
+        # Skip primary DN lookups. They are handled by _extract_primary_dn_value
+        target_field = lhs.target if isinstance(lhs, Col) else lhs
+        if isinstance(target_field, PrimaryDistinguishedNameField):
+            return ''
+
         lookup_type = lookup.lookup_name
 
         render: Callable[[str, str, Any], str | None] | None = getattr(lhs.field, 'render_lookup', None)
@@ -219,7 +224,11 @@ class SQLCompiler(BaseSQLCompiler):
             else:
                 raise TypeError(f'Unsupported child type: {type(child)}')
 
+        subfilters = [sf for sf in subfilters if sf]
         combined_filter = ''.join(subfilters)
+
+        if not subfilters:
+            return ''
 
         logger.debug(
             'WhereNode: negated=%s, operator=%s, combined=%s, length=%s',
@@ -247,6 +256,8 @@ class SQLCompiler(BaseSQLCompiler):
             return base_filter
 
         ldap_filter = self._where_node_to_ldap_filter(where_node)
+        if not ldap_filter:
+            return base_filter
         ldap_filter = f'(&{base_filter}{ldap_filter})'
         logger.debug('Compiled LDAP filter: %s', ldap_filter)
         return ldap_filter
@@ -274,11 +285,65 @@ class SQLCompiler(BaseSQLCompiler):
         logger.debug('Order by fields for LDAP query: %s', ordering_rules)
         return ordering_rules
 
+    def _extract_primary_dn_value(self, node: WhereNode) -> str | None:
+        """
+        Walks the WhereNode to find an exact lookup on PrimaryDistinguishedNameField.
+
+        Returns the DN value if it's in a simple extractable position (top-level AND child),
+        or None if not found / not extractable.
+
+        Raises NotSupportedError for unsupported patterns (OR with DN, dn__in with multiple values).
+        """
+        if not node.children:
+            return None
+
+        for child in node.children:
+            if isinstance(child, WhereNode):
+                result = self._extract_primary_dn_value(child)
+                if result is not None:
+                    return result
+                continue
+
+            if not isinstance(child, Lookup):
+                continue
+
+            field = child.lhs.target if isinstance(child.lhs, Col) else child.lhs
+            if not isinstance(field, PrimaryDistinguishedNameField):
+                continue
+
+            # Found a lookup on the primary DN field
+            if node.connector == 'OR':
+                raise NotSupportedError(
+                    'OR conditions involving the primary DN field are not supported. '
+                    'The DN is used as the search base, not as a filter.'
+                )
+
+            if isinstance(child, In):
+                if len(child.rhs) == 1:
+                    return child.rhs[0]
+                raise NotSupportedError(
+                    'dn__in with multiple values is not supported. '
+                    'The DN is used as the search base, so only a single value is allowed.'
+                )
+
+            if isinstance(child, Exact):
+                return child.rhs
+
+        return None
+
     def _build_ldap_search(self, with_limits):
         attrlist = self._compile_select()
         control_type = LDAPSearchControlType.NO_CONTROL
         limit = 0
         ordering_rules = None
+
+        # check if the query filters on the primary DN field
+        base = self.query.model.base_dn
+        scope = self.query.model.search_scope
+        dn_value = self._extract_primary_dn_value(self.query.where) if self.query.where else None
+        if dn_value:
+            base = dn_value
+            scope = ldap.SCOPE_BASE
 
         if attrlist:
             ordering_rules = self._compile_order_by()
@@ -296,8 +361,8 @@ class SQLCompiler(BaseSQLCompiler):
             attrlist = ['1.1']
 
         ldap_search = LDAPSearch(
-            base=self.query.model.base_dn,
-            scope=self.query.model.search_scope,
+            base=base,
+            scope=scope,
             attrlist=attrlist,
             filterstr=self._compile_where(),
             ordering_rules=ordering_rules,  # only used when searching via SSSVLV for now

@@ -18,7 +18,7 @@ from ldapdb.iterables import (
     LDAPValuesListIterable,
 )
 from ldapdb.typing_compat import Self, override
-from .fields import DistinguishedNameField, PasswordField
+from .fields import PasswordField, PrimaryDistinguishedNameField
 
 if TYPE_CHECKING:
     from django.db.models.options import Options
@@ -96,7 +96,7 @@ class LDAPModel(django_models.Model):
 
     objects = LDAPQuerySet.as_manager()
 
-    dn = DistinguishedNameField(db_column='dn', unique=True, read_only=True, hidden=True)
+    dn = PrimaryDistinguishedNameField(db_column='dn', unique=True, read_only=True, hidden=True)
 
     class Meta:
         abstract = True

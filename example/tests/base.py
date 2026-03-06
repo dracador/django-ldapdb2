@@ -71,7 +71,7 @@ def get_new_ldap_search(
         limit=limit,
         offset=offset,
         ordering_rules=ordering_rules or [('uid', 'caseIgnoreOrderingMatch')],  # Default to pk field for SSSVLV
-        scope=scope or ldap.SCOPE_SUBTREE,
+        scope=scope if scope is not None else ldap.SCOPE_SUBTREE,
     )
 
 
