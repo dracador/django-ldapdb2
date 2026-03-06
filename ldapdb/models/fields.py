@@ -280,6 +280,15 @@ class DistinguishedNameField(CharField):
         return escape_ldap_dn_chars(value)
 
 
+class PrimaryDistinguishedNameField(DistinguishedNameField):
+    """
+    The main DN of any LDAP model.
+    Lookups on this field are converted to SCOPE_BASE searches by the compiler,
+    instead of generating (dn=...) filters.
+    """
+    _allowed_lookups = {'exact', 'iexact', 'in', 'isnull'}
+
+
 class BinaryField(django_fields.BinaryField, LDAPField):
     binary_field = True
 

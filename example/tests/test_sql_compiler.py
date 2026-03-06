@@ -1,5 +1,9 @@
 from collections import namedtuple
 
+from django.db import NotSupportedError
+from django.db.models import Q
+from ldapdb.backends.ldap.lib import LDAPScope
+
 from example.models import LDAPUser
 from .base import LDAPTestCase, get_new_ldap_search
 from .constants import TEST_LDAP_ADMIN_USER_1, TEST_LDAP_AVAILABLE_USERS, TEST_LDAP_GROUP_1, TEST_LDAP_USER_1
@@ -23,6 +27,40 @@ class SQLCompilerTestCase(LDAPTestCase):
     def test_ldapuser_get(self):
         obj = self._get_user_1_object()
         self.assertLDAPModelObjectsAreEqual(TEST_LDAP_USER_1, obj)
+
+    def test_ldapuser_get_via_dn(self):
+        """We have to handle a .get(dn=xyz) a little bit different, since we cannot put it in an LDAP filter string"""
+        obj = LDAPUser.objects.get(dn=TEST_LDAP_USER_1.dn)
+        self.assertLDAPModelObjectsAreEqual(TEST_LDAP_USER_1, obj)
+
+    def test_ldapuser_filter_via_dn(self):
+        """Verify that a DN lookup produces a SCOPE_BASE search with the DN as base."""
+        queryset = LDAPUser.objects.filter(dn=TEST_LDAP_USER_1.dn)
+        expected_ldap_search = get_new_ldap_search(
+            base=TEST_LDAP_USER_1.dn,
+            scope=LDAPScope.BASE,
+        )
+        self.assertLDAPSearchIsEqual(queryset, expected_ldap_search)
+
+    def test_ldapuser_filter_dn_with_other_conditions(self):
+        """DN lookup combined with other filters uses SCOPE_BASE + remaining filter."""
+        queryset = LDAPUser.objects.filter(dn=TEST_LDAP_USER_1.dn, username='user1')
+        expected_ldap_search = get_new_ldap_search(
+            base=TEST_LDAP_USER_1.dn,
+            scope=LDAPScope.BASE,
+            filterstr='(uid=user1)',
+        )
+        self.assertLDAPSearchIsEqual(queryset, expected_ldap_search)
+
+    def test_ldapuser_filter_dn_in_multiple_values_raises(self):
+        """dn__in with multiple values is not supported."""
+        with self.assertRaises(NotSupportedError):
+            list(LDAPUser.objects.filter(dn__in=[TEST_LDAP_USER_1.dn, 'cn=other,dc=example,dc=org']))
+
+    def test_ldapuser_filter_dn_or_raises(self):
+        """OR conditions with DN are not supported."""
+        with self.assertRaises(NotSupportedError):
+            list(LDAPUser.objects.filter(Q(dn=TEST_LDAP_USER_1.dn) | Q(username='user1')))
 
     def test_ldapuser_exists(self):
         self.assertTrue(LDAPUser.objects.all().exists())
