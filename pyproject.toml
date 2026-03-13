@@ -26,12 +26,11 @@ dev = [
     "django-stubs",
     "faker>=30.8.1",
     "ruff",
-
     # used only for Sentry integration tests
     "sentry-sdk[django]",
-
     # used only for PasswordField tests
     "argon2-cffi",
+    "tblib>=3.2.2",  # needed to run tests parallel
 ]
 
 ######################################################################################

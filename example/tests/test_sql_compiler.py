@@ -73,7 +73,8 @@ class SQLCompilerTestCase(LDAPTestCase):
         self.assertEqual(LDAPUser.objects.filter(username__contains='admin').count(), 1)
 
     def test_ldapuser_len_all_equals_count(self):
-        self.assertEqual(LDAPUser.objects.all().count(), len(LDAPUser.objects.all()))
+        qs = LDAPUser.objects.filter(username=TEST_LDAP_USER_1.username)
+        self.assertEqual(qs.count(), len(qs))
 
     def test_exists_after_filter(self):
         self.assertTrue(LDAPUser.objects.filter(username=TEST_LDAP_USER_1.username).exists())

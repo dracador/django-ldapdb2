@@ -1,10 +1,9 @@
-import ldap
 from unittest.mock import MagicMock
 
+import ldap
 from django.core.exceptions import ValidationError
 from django.db import connections
 from django.test import TestCase
-
 from ldapdb.models.fields import DistinguishedNameField, MemberField, UpdateStrategy
 
 from example.models import BaseLDAPGroup, LDAPGroup, LDAPUser
