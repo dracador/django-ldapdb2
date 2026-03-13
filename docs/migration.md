@@ -16,6 +16,25 @@ To keep the existing behaviour, set the ```base_filter``` attribute to include t
 
 # Fields
 
+## `ListField` has been replaced by `multi_valued_field=True`
+
+`ListField` no longer exists as a standalone field. Use any field with `multi_valued_field=True` instead:
+
+```python
+# Before
+emails = ListField(db_column='mail')
+
+# After
+emails = CharField(db_column='mail', multi_valued_field=True)
+```
+
+The `update_strategy` parameter controls how modifications are written to the server:
+- `UpdateStrategy.REPLACE` (default) — replaces the entire attribute value list in one operation
+- `UpdateStrategy.ADD_DELETE` — sends individual `MOD_ADD`/`MOD_DELETE` operations per changed value
+
+`ADD_DELETE` is the better choice for large multi-valued attributes (e.g. group members) where you only want
+to add or remove specific values without rewriting the full list.
+
 ## Custom fields
 
 If you created any custom fields, the behavior has changed slightly. Fields now inherit from ```LDAPField```.
