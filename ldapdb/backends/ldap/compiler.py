@@ -29,9 +29,8 @@ except ImportError:
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from ldap.ldapobject import ReconnectLDAPObject
-
     from .base import DatabaseWrapper
+    from .connection import LDAPClient
 
 logger = logging.getLogger(__name__)
 
@@ -60,25 +59,24 @@ class SQLCompiler(BaseSQLCompiler):
         self.field_mapping = {field.attname: field.column for field in model._meta.fields}
         self.reverse_field_mapping = {field.column: field for field in model._meta.fields}
 
-    def _get_ldap_conn(self) -> 'ReconnectLDAPObject':
+    def _get_ldap_client(self) -> 'LDAPClient':
         """
-        Makes sure the connection is established and returns the underlying LDAP connection object.
-        The alternative to this method would be to use something like the following:
+        Makes sure the connection is established and returns the LDAP I/O client.
 
-        with self.connection.cursor() as cursor:
-            cursor.db.connection.add_s(dn, add.as_modlist())
+        The client wraps the underlying ``ReconnectLDAPObject`` and exposes
+        synchronous request methods that go through ``*_ext`` + ``result3`` —
+        same I/O path as the async client, with built-in retry on
+        ``SERVER_DOWN``.
 
-        That however always builds a new cursor object, which is not needed here,
-        since we don't use anything in the cursor.
-        Maybe revisit this later if we need to use cursors for something else.
-        Something like django-debug-toolbar would use the cursor to display the executed queries,
-        but since we want to provide proper LDAP search/query information,
-        we'd have to implement custom handling via Signals or another solution, anyway.
+        We don't go through ``self.connection.cursor()`` here because that
+        always builds a new cursor object and we don't need cursor state for
+        the update/insert/delete compilers — just direct I/O.
 
-        Also: This works without ensure_connection() for django versions >= 5.1. Not for 4.2.
+        Note: this works without ``ensure_connection()`` on Django >= 5.1 but
+        not on 4.2; the explicit call is the safe path.
         """
         self.connection.ensure_connection()
-        return self.connection.connection
+        return self.connection.ldap_client
 
     def _pk_value_from_where(self):
         # only used in Update and Delete compilers
@@ -395,7 +393,7 @@ class SQLUpdateCompiler(compiler.SQLUpdateCompiler, SQLCompiler):
     def execute_sql(self, returning_fields=None):  # noqa: ARG002 - don't need returning_fields, we just force another search
         model = cast('LDAPModel', cast('object', self.query.model))
         db = self.connection
-        ldap_conn = self._get_ldap_conn()
+        ldap_client = self._get_ldap_client()
         charset = db.charset
 
         pk_val = self._pk_value_from_where()
@@ -403,7 +401,8 @@ class SQLUpdateCompiler(compiler.SQLUpdateCompiler, SQLCompiler):
 
         with db.wrap_database_errors:
             try:
-                _, entry = ldap_conn.search_s(dn, ldap.SCOPE_BASE)[0]
+                _rtype, rdata, _ctrls = ldap_client.search(dn, ldap.SCOPE_BASE)
+                _, entry = rdata[0]
             except ldap.NO_SUCH_OBJECT:
                 # This might happen if an object is created via .save().
                 # Returning 0 here forces Django to use the SQLInsertCompiler.
@@ -455,7 +454,7 @@ class SQLUpdateCompiler(compiler.SQLUpdateCompiler, SQLCompiler):
         logger.debug('LDAP modify request for %s\n%s', dn, mod)
 
         with db.wrap_database_errors:
-            ldap_conn.modify_s(dn, mod.as_modlist())
+            ldap_client.modify(dn, mod.as_modlist())
 
         return 1
 
@@ -472,7 +471,7 @@ class SQLInsertCompiler(compiler.SQLInsertCompiler, SQLCompiler):
         obj = cast('LDAPModel', self.query.objs[0])
         model = cast('LDAPModel', cast('object', self.query.model))
         db = self.connection
-        ldap_conn = self._get_ldap_conn()
+        ldap_client = self._get_ldap_client()
 
         # DN to use for LDAP operation
         dn = obj.build_dn_from_pk(escape_chars=True)
@@ -500,7 +499,7 @@ class SQLInsertCompiler(compiler.SQLInsertCompiler, SQLCompiler):
 
         with self.connection.wrap_database_errors:
             # make sure any exceptions bubble up as proper Django errors
-            ldap_conn.add_s(dn, add.as_modlist())
+            ldap_client.add(dn, add.as_modlist())
 
         # Set obj.dn only for representation in django space.
         obj.dn = obj.build_dn_from_pk(escape_chars=False)
@@ -517,7 +516,7 @@ class SQLDeleteCompiler(compiler.SQLDeleteCompiler, SQLCompiler):
         **_kwargs,
     ):
         model = cast('LDAPModel', cast('object', self.query.model))
-        ldap_conn = self._get_ldap_conn()
+        ldap_client = self._get_ldap_client()
 
         pk_val = self._pk_value_from_where()
         dn = model.build_dn(pk_val, escape_chars=True)
@@ -526,7 +525,7 @@ class SQLDeleteCompiler(compiler.SQLDeleteCompiler, SQLCompiler):
 
         with self.connection.wrap_database_errors:
             try:
-                ldap_conn.delete_s(dn)
+                ldap_client.delete(dn)
                 deleted_count = 1
             except ldap.NO_SUCH_OBJECT:
                 deleted_count = 0

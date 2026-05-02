@@ -1,6 +1,10 @@
+import asyncio
+import contextlib
 from functools import cached_property
+from typing import TYPE_CHECKING
 
 import ldap
+from asgiref.sync import sync_to_async
 from django.db.backends.base.base import BaseDatabaseWrapper
 from django.db.backends.base.validation import BaseDatabaseValidation
 from django.db.backends.utils import CursorWrapper
@@ -15,6 +19,9 @@ from .introspection import DatabaseIntrospection
 from .lib import LDAPDatabase
 from .lookups import LDAP_OPERATORS
 from .operations import DatabaseOperations
+
+if TYPE_CHECKING:
+    from .connection import LDAPClient
 
 
 class DatabaseWrapper(BaseDatabaseWrapper):
@@ -39,6 +46,15 @@ class DatabaseWrapper(BaseDatabaseWrapper):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.operators = {name: fmt for name, (fmt, _) in LDAP_OPERATORS.items()}
+        # Sync LDAPClient wrapping ``self.connection``. Lazily built; rebuilt
+        # if ``self.connection`` is replaced (Django's ``connect()`` /
+        # ``close()`` lifecycle).
+        self._ldap_client: LDAPClient | None = None
+        # Per-event-loop async LDAPClient cache. Each event loop that runs
+        # async ORM calls gets its own dedicated client wrapping its own
+        # python-ldap connection. ``add_reader`` registrations are loop-local,
+        # so clients cannot be shared across loops.
+        self._async_clients: dict[asyncio.AbstractEventLoop, LDAPClient] = {}
 
     def _commit(self):
         pass
@@ -116,7 +132,16 @@ class DatabaseWrapper(BaseDatabaseWrapper):
 
     @async_unsafe
     def create_cursor(self, *_args, **_kwargs):
-        return CursorWrapper(DatabaseCursor(self.connection, self.settings_dict), self)
+        # Local import to keep the cursor module decoupled from base.
+        from .cursor import get_prefetched_cursor
+
+        prefetched = get_prefetched_cursor()
+        if prefetched is not None:
+            # The async manager methods pre-fetched results via the async
+            # client; hand those rows to the sync ORM so it can build models
+            # with its existing machinery.
+            return CursorWrapper(prefetched, self)
+        return CursorWrapper(DatabaseCursor(self.ldap_client, self.settings_dict), self)
 
     @async_unsafe
     def close(self):
@@ -126,3 +151,68 @@ class DatabaseWrapper(BaseDatabaseWrapper):
             if hasattr(self.connection, '_l'):
                 self.connection.unbind_s()
             self.connection = None
+        # Drop the cached sync client; a fresh one is built next time
+        # ``ensure_connection`` produces a new ReconnectLDAPObject.
+        self._ldap_client = None
+
+    # ------------------------------------------------------------------ #
+    # LDAP I/O client (sync)                                             #
+    # ------------------------------------------------------------------ #
+
+    @property
+    def ldap_client(self) -> 'LDAPClient':
+        """Sync LDAP I/O client wrapping ``self.connection``.
+
+        Lazy: built on first access after a connection exists; rebuilt if
+        ``self.connection`` is replaced (e.g. after a ``close()`` /
+        re-``connect()``). Used by :class:`DatabaseCursor` and the
+        update/insert/delete compilers.
+        """
+        # Local import to avoid a circular dependency at module load time
+        # (``connection`` imports nothing from this module, but base.py is
+        # already mid-init when its decorators run on first import).
+        from .connection import LDAPClient
+
+        self.ensure_connection()
+        if self._ldap_client is None or self._ldap_client.connection is not self.connection:
+            self._ldap_client = LDAPClient(self.connection)
+        return self._ldap_client
+
+    # ------------------------------------------------------------------ #
+    # LDAP I/O client (async)                                            #
+    # ------------------------------------------------------------------ #
+
+    async def aget_async_client(self) -> 'LDAPClient':
+        """Return (creating if needed) an async :class:`LDAPClient` bound to
+        the current event loop.
+
+        ``add_reader`` registrations are loop-local, so each event loop needs
+        its own client wrapping its own ``ReconnectLDAPObject``. Within one
+        loop the client is reused across coroutines — multiple in-flight
+        requests are multiplexed by msgid on a single LDAP socket.
+        """
+        from .connection import LDAPClient
+
+        loop = asyncio.get_running_loop()
+        existing = self._async_clients.get(loop)
+        if existing is not None and not existing._closed:
+            return existing
+
+        # Build a fresh ``ReconnectLDAPObject`` off-loop (the bind is
+        # blocking I/O). ``get_new_connection`` is ``@async_unsafe``-decorated,
+        # so we go through ``sync_to_async``.
+        conn_params = self.get_connection_params()
+        sync_conn = await sync_to_async(self.get_new_connection)(conn_params)
+        client = LDAPClient(sync_conn, loop=loop)
+        self._async_clients[loop] = client
+        return client
+
+    async def aclose_async_clients(self) -> None:
+        """Close all per-loop async clients owned by this wrapper.
+
+        Intended for shutdown / teardown. Safe to call from any loop.
+        """
+        for client in list(self._async_clients.values()):
+            with contextlib.suppress(Exception):
+                await client.aclose()
+        self._async_clients.clear()

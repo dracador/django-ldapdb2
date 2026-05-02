@@ -18,6 +18,14 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path
 
+from example import views
+
 urlpatterns = [
     path('admin/', admin.site.urls),
+    # Demo views illustrating the sync vs async ORM paths against the test
+    # LDAP directory. Run the example app under an ASGI server
+    # (``uvicorn example.asgi:application``) for the async path to behave
+    # as expected; ``runserver`` works too but is less representative.
+    path('users/sync/', views.users_sync, name='users-sync'),
+    path('users/async/', views.users_async, name='users-async'),
 ]

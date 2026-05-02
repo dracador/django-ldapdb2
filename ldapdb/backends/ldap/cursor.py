@@ -1,3 +1,4 @@
+import contextvars
 import functools
 import json
 import logging
@@ -17,7 +18,20 @@ if TYPE_CHECKING:
     from ldap.controls import RequestControl
     from ldap.ldapobject import ReconnectLDAPObject
 
+    from .connection import LDAPClient
+
 logger = logging.getLogger(__name__)
+
+
+# Used to bridge async-pre-fetched results into Django's sync ORM machinery:
+# when set (via :func:`use_prefetched_cursor`), :meth:`DatabaseWrapper.create_cursor`
+# returns the prefetched cursor instead of opening a real one. The async
+# manager methods (``LDAPQuerySet.aget`` etc.) execute via the async cursor,
+# stash the rows here, then call sync ``qs.get()`` inside ``sync_to_async`` —
+# which sees the prefetched rows and skips the network round-trip.
+_prefetched_cursor_var: contextvars.ContextVar = contextvars.ContextVar(
+    'ldapdb._prefetched_cursor', default=None,
+)
 
 
 def _sort_and_slice_ldap_results(
@@ -87,8 +101,13 @@ class DatabaseCursor:
     TODO: Implement a way to sort results in Python if SSS is not used.
     """
 
-    def __init__(self, connection, settings_dict: dict | None = None):
-        self.connection: ReconnectLDAPObject | None = connection
+    def __init__(self, client: 'LDAPClient', settings_dict: dict | None = None):
+        # ``self.client`` does the I/O. ``self.connection`` is exposed for
+        # backward compatibility with tests that reach into the underlying
+        # python-ldap ``ReconnectLDAPObject`` (e.g. test fixtures that issue
+        # ``cursor.connection.modify_s(...)``).
+        self.client: LDAPClient = client
+        self.connection: ReconnectLDAPObject | None = client.connection
         self.settings_dict: dict = settings_dict or {}
         self.query: LDAPQuery | None = None
         self.description = None
@@ -166,13 +185,14 @@ class DatabaseCursor:
 
     def _execute_without_ctrls(self, timeout: int = -1):
         logger.debug('DatabaseCursor._execute_without_ctrls')
-        return self.connection.search_st(
+        _rtype, rdata, _ctrls = self.client.search(
             base=self.search_obj.base,
             scope=self.search_obj.scope,
             filterstr=self.search_obj.filterstr,
             attrlist=self.search_obj.attrlist_without_dn,
             timeout=timeout,
         )
+        return rdata
 
     def _execute_with_simple_paging(self, timeout: int = -1):
         page_size = self.settings_dict.get('PAGE_SIZE', 1000)
@@ -180,7 +200,7 @@ class DatabaseCursor:
         results = []
         while True:
             ctrl = SimplePagedResultsControl(criticality=True, size=page_size, cookie=cookie)
-            msgid = self.connection.search_ext(
+            _rtype, rdata, serverctrls = self.client.search(
                 base=self.search_obj.base,
                 scope=self.search_obj.scope,
                 filterstr=self.search_obj.filterstr,
@@ -188,7 +208,6 @@ class DatabaseCursor:
                 serverctrls=[ctrl],
                 timeout=timeout,
             )
-            _rtype, rdata, _rmsgid, serverctrls = self.connection.result3(msgid)
             results.extend(rdata)
             paged_ctrl = next(
                 (c for c in serverctrls if c.controlType == SimplePagedResultsControl.controlType),
@@ -233,7 +252,7 @@ class DatabaseCursor:
         )
 
         try:
-            msgid = self.connection.search_ext(
+            _rtype, rdata, _ctrls = self.client.search(
                 base=self.search_obj.base,
                 scope=self.search_obj.scope,
                 filterstr=self.search_obj.filterstr,
@@ -241,9 +260,7 @@ class DatabaseCursor:
                 serverctrls=serverctrls,
                 timeout=timeout,
             )
-
-            rtype, rdata, rmsgid, serverctrls = self.connection.result3(msgid)
-            logger.debug('DatabaseCursor._execute_with_sssvlv - Result: length: %s, results: %s', len(rdata), rdata)
+            logger.debug('DatabaseCursor._execute_with_sssvlv - Result length: %s', len(rdata))
         except ldap.LDAPError as exc:
             # VLV error 76 -> Index out of range
             if exc.args and isinstance(exc.args[0], dict) and exc.args[0].get('result') == ldap.VLV_ERROR.errnum:
@@ -320,12 +337,92 @@ class DatabaseCursor:
 
     def _check_closed(self):
         if self.closed:
-            raise LDAPDatabase.ProgrammingError('Cursor is closed')
+            raise LDAPDatabase.DatabaseError('Cursor is closed')
 
     def close(self):
         logger.debug('DatabaseCursor.close: Closing cursor')
+        # NB: do not call ``self.client.close()``. The client is owned by the
+        # ``DatabaseWrapper`` and may be reused for the next cursor. Just drop
+        # references so this cursor is unusable.
+        self.client = None  # type: ignore[assignment]
         self.connection = None
         self.closed = True
         self.query = None
         self.results = []
         self._result_iter = iter([])
+
+
+class PrefetchedDatabaseCursor:
+    """A PEP-249-shaped cursor that returns rows fetched ahead of time.
+
+    Constructed by :class:`AsyncDatabaseCursor`-using manager methods after
+    they've already run the LDAP search asynchronously. Bridges the
+    pre-fetched rows into Django's sync ORM machinery: ``execute()`` is a
+    no-op, and ``fetch*`` returns the pre-loaded rows.
+
+    See ``DatabaseWrapper.create_cursor`` for how this is plumbed in via the
+    ``_prefetched_cursor_var`` ContextVar.
+    """
+
+    def __init__(self, results: list, description: list | None) -> None:
+        self.results = results
+        self.description = description
+        self.rowcount = len(results)
+        self.arraysize = 1
+        self.lastrowid = None
+        self.closed = False
+        self._result_iter = iter(results)
+
+    def execute(self, query, *_args, **_params) -> None:  # noqa: ARG002
+        # No-op: results are already loaded. We accept the call so that
+        # Django's compiler.execute_sql works unchanged.
+        if self.closed:
+            raise LDAPDatabase.DatabaseError('Cursor is closed')
+
+    def executemany(self, query, param_list):
+        raise NotImplementedError('PrefetchedDatabaseCursor does not support executemany')
+
+    def fetchone(self):
+        if self.closed:
+            raise LDAPDatabase.DatabaseError('Cursor is closed')
+        return next(self._result_iter, None)
+
+    def fetchmany(self, size=None):
+        if self.closed:
+            raise LDAPDatabase.DatabaseError('Cursor is closed')
+        size = size or self.arraysize
+        out = []
+        for _ in range(size):
+            row = self.fetchone()
+            if row is None:
+                break
+            out.append(row)
+        return out
+
+    def fetchall(self):
+        if self.closed:
+            raise LDAPDatabase.DatabaseError('Cursor is closed')
+        return list(self._result_iter)
+
+    def close(self) -> None:
+        self.closed = True
+        self.results = []
+        self._result_iter = iter([])
+
+
+def use_prefetched_cursor(cursor: PrefetchedDatabaseCursor) -> contextvars.Token:
+    """Stash a prefetched cursor in the current async context.
+
+    Returns the ContextVar token; pass it to :func:`reset_prefetched_cursor`
+    when done. The cursor will be returned by ``DatabaseWrapper.create_cursor``
+    in place of a real DatabaseCursor while the token is active.
+    """
+    return _prefetched_cursor_var.set(cursor)
+
+
+def reset_prefetched_cursor(token: contextvars.Token) -> None:
+    _prefetched_cursor_var.reset(token)
+
+
+def get_prefetched_cursor() -> PrefetchedDatabaseCursor | None:
+    return _prefetched_cursor_var.get()

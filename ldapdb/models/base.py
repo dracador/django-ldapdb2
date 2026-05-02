@@ -2,6 +2,7 @@ from collections.abc import Collection
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
 import ldap
+from asgiref.sync import sync_to_async
 from django.core.exceptions import ValidationError
 from django.db import DEFAULT_DB_ALIAS, NotSupportedError, connections, models as django_models
 from django.db.models import QuerySet
@@ -87,6 +88,94 @@ class LDAPQuerySet(QuerySet):
         # Maybe allow raw to take an LDIF input or an LDAPSearch instance?
         raise AssertionError('Raw queries not supported with LDAP backend')
 
+    # ------------------------------------------------------------------ #
+    # Async ORM methods                                                  #
+    # ------------------------------------------------------------------ #
+    #
+    # These override Django's defaults (which are ``await sync_to_async(...)``
+    # over the sync method) so that the LDAP search is dispatched on the
+    # event loop via :class:`LDAPClient`'s async methods. Inside one event
+    # loop, ``asyncio.gather`` over multiple ``aget``/``acount`` calls
+    # multiplexes them on a single LDAP connection by msgid.
+    #
+    # The model-construction step still runs through Django's sync ORM
+    # machinery (compiler/iterables/from_db) — but on rows we already
+    # fetched. See :class:`PrefetchedDatabaseCursor` for the bridge.
+
+    async def aget(self, *args, **kwargs):
+        target_qs = self.filter(*args, **kwargs) if (args or kwargs) else self
+        return await _aget_via_async_cursor(target_qs)
+
+    async def acount(self):
+        rows, _ = await _async_fetch_rows(self)
+        return len(rows)
+
+    async def afirst(self):
+        qs = self if self.ordered else self.order_by('pk')
+        # ``qs[:1].aget()`` would raise DoesNotExist on empty; we want None
+        # to match Django's first() semantics.
+        rows, _ = await _async_fetch_rows(qs[:1])
+        if not rows:
+            return None
+        # Materialize via the prefetched-cursor bridge so the model is
+        # built by Django's normal machinery.
+        return await _aget_from_rows(qs[:1], rows)
+
+    async def aexists(self):
+        rows, _ = await _async_fetch_rows(self[:1])
+        return bool(rows)
+
+
+async def _async_fetch_rows(qs: 'LDAPQuerySet') -> tuple[list, list | None]:
+    """Compile the queryset and execute it via :class:`AsyncDatabaseCursor`.
+
+    Returns ``(rows, description)`` exactly as the cursor would expose them.
+    Used as the primitive for ``acount``/``afirst``/``aexists`` and as the
+    first half of ``aget``/``_aget_from_rows``.
+    """
+    from ldapdb.backends.ldap.async_cursor import AsyncDatabaseCursor
+
+    db = qs.db
+    wrapper = connections[db]
+
+    def _compile() -> LDAPQuery:
+        compiler = qs.query.get_compiler(using=db)
+        return compiler.as_sql()[0]
+
+    ldap_query = await sync_to_async(_compile, thread_sensitive=True)()
+    client = await wrapper.aget_async_client()
+    async_cursor = AsyncDatabaseCursor(client, settings_dict=wrapper.settings_dict)
+    try:
+        await async_cursor.aexecute(ldap_query)
+        return list(async_cursor.results), async_cursor.description
+    finally:
+        await async_cursor.aclose()
+
+
+async def _aget_from_rows(qs: 'LDAPQuerySet', rows: list, description: list | None = None):
+    """Materialize a single model from pre-fetched rows.
+
+    Bridges into Django's sync ``qs.get()`` via :class:`PrefetchedDatabaseCursor`.
+    Raises ``DoesNotExist``/``MultipleObjectsReturned`` like the sync path.
+    """
+    from ldapdb.backends.ldap.cursor import (
+        PrefetchedDatabaseCursor,
+        reset_prefetched_cursor,
+        use_prefetched_cursor,
+    )
+
+    prefetched = PrefetchedDatabaseCursor(rows, description)
+    token = use_prefetched_cursor(prefetched)
+    try:
+        return await sync_to_async(qs.get, thread_sensitive=True)()
+    finally:
+        reset_prefetched_cursor(token)
+
+
+async def _aget_via_async_cursor(qs: 'LDAPQuerySet'):
+    rows, description = await _async_fetch_rows(qs)
+    return await _aget_from_rows(qs, rows, description)
+
 
 class LDAPModel(django_models.Model):
     base_dn: str = None
@@ -125,9 +214,8 @@ class LDAPModel(django_models.Model):
             if new_dn_escaped != self.escaped_dn:
                 new_rdn = self.build_rdn(self.rdn_value, escape_chars=True)
                 conn = connections[using]
-                with conn.wrap_database_errors, conn.cursor() as cursor:
-                    ldap_conn = cursor.db.connection
-                    ldap_conn.rename_s(self.escaped_dn, new_rdn)
+                with conn.wrap_database_errors:
+                    conn.ldap_client.rename(self.escaped_dn, new_rdn)
                 self.dn = new_dn
 
         return super().save(*args, **kwargs)

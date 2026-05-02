@@ -108,7 +108,17 @@ class LDAPDatabase:
     Error = ldap.LDAPError
 
     class DatabaseError(Error):
-        """Database-side errors."""
+        """Database-side errors. Use this class when you need a *raisable* exception.
+
+        The ``OperationalError`` / ``IntegrityError`` / ``ProgrammingError`` / etc.
+        attributes below are deliberately tuples, not classes — Django's
+        ``DatabaseErrorWrapper`` (``django/db/utils.py``) does
+        ``issubclass(exc_type, db_wrapper.Database.X)``, and ``issubclass`` with a
+        tuple matches if the exception is a subclass of *any* class in the tuple.
+        That is how raw ``ldap.*`` exceptions get translated to the right Django
+        category. Don't try to ``raise LDAPDatabase.ProgrammingError(...)`` —
+        you can't raise a tuple. Raise ``DatabaseError`` instead.
+        """
 
     OperationalError = (
         DatabaseError,
