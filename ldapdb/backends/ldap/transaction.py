@@ -16,6 +16,24 @@ from .pyasn_rfc5805 import TxnEndReq, TxnEndRes
 # Start and end transaction OIDs are found in supportedExtension.
 # Specification Control is found in supportedControl.
 # Please also see note about Transaction Specification Control in `features.py: supports_transactions`.
+#
+# Read-after-write inside a transaction is not supported.
+# RFC 5805 §4 scopes the Transaction Specification Control to Add/Delete/Modify/ModifyDN only,
+# and OpenLDAP enforces this: txnSpec is registered with SLAP_CTRL_UPDATE in
+# servers/slapd/controls.c, so a Search carrying the (critical) txn control is rejected with
+# LDAP_UNAVAILABLE_CRITICAL_EXTENSION ("critical extension is unavailable"). Marking the
+# control non-critical doesn't help either, since then txn_spec_ctrl() returns LDAP_PROTOCOL_ERROR
+# ("txnSpec control must be marked critical").
+#
+#     with transaction.atomic(using='ldap'):
+#         user.name = 'new'
+#         user.save()
+#         LDAPUser.objects.filter(name='new')  # does NOT see the pending write
+#
+# will not observe its own pending writes. The search runs without the txn control and sees
+# whatever snapshot the server is willing to give it (in OpenLDAP/back-mdb, the pre-txn state).
+# This is unplanned in any RFC regarding that matter, so we'll have to think 
+# of something else in the future.
 LDAP_OID_TRANSACTION_START = '1.3.6.1.1.21.1'
 LDAP_OID_TRANSACTION_SPECIFICATION_CONTROL = '1.3.6.1.1.21.2'
 LDAP_OID_TRANSACTION_END = '1.3.6.1.1.21.3'
