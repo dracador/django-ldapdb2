@@ -11,7 +11,16 @@ from ldap.controls.vlv import VLVRequestControl
 
 from ldapdb.exceptions import LDAPQueryTypeError
 from ldapdb.models import LDAPQuery
-from .lib import LDAPDatabase, LDAPSearchControlType, unescape_ldap_dn_chars
+from .lib import (
+    LDAPAddOp,
+    LDAPDatabase,
+    LDAPDeleteOp,
+    LDAPModifyOp,
+    LDAPRawSearchOp,
+    LDAPRenameOp,
+    LDAPSearchControlType,
+    unescape_ldap_dn_chars,
+)
 
 if TYPE_CHECKING:
     from ldap.controls import RequestControl
@@ -121,17 +130,53 @@ class DatabaseCursor:
             case _:
                 raise NotImplementedError(f'Unknown control type {self.search_obj.control_type}')
 
-    def execute(self, query: LDAPQuery, *_args, **_params):
-        logger.debug('DatabaseCursor.execute: query: %s (%s), params: %s', query, type(query), _params)
+    def execute(self, op, *_args, **_params):
+        """
+        Dispatch one logical LDAP operation.
+
+        Routing every operation (reads *and* writes) through here is what makes
+        Django's query counting (assertNumQueries / django-debug-toolbar) see them:
+        counting is a side effect of CursorDebugWrapper.execute(), so anything that
+        reaches the driver another way stays invisible.
+        """
+        logger.debug('DatabaseCursor.execute: op: %s (%s), params: %s', op, type(op), _params)
         self._check_closed()
 
-        if not isinstance(query, LDAPQuery):
-            raise LDAPQueryTypeError(query)
-
-        self.query = query
         self.description = None
         self.rowcount = -1
         self.lastrowid = None
+
+        if isinstance(op, LDAPQuery):
+            self._execute_search_query(op)
+        elif isinstance(op, LDAPAddOp):
+            self.connection.add_s(op.dn, op.modlist)
+            self._reset_results()
+        elif isinstance(op, LDAPModifyOp):
+            self.connection.modify_s(op.dn, op.modlist)
+            self._reset_results()
+        elif isinstance(op, LDAPDeleteOp):
+            self.connection.delete_s(op.dn)
+            self._reset_results()
+        elif isinstance(op, LDAPRenameOp):
+            self.connection.rename_s(op.dn, op.newrdn)
+            self._reset_results()
+        elif isinstance(op, LDAPRawSearchOp):
+            # Raw, unformatted [(dn, attrs)] for the UPDATE read-before-write diff.
+            # NO_SUCH_OBJECT must propagate so the compiler can fall through to INSERT.
+            results = self.connection.search_s(op.dn, op.scope, attrlist=op.attrlist)
+            self.results = results
+            self.rowcount = len(results)
+            self._result_iter = iter(results)
+        else:
+            raise LDAPQueryTypeError(op)
+
+    def _reset_results(self):
+        self.results = []
+        self.rowcount = -1
+        self._result_iter = iter([])
+
+    def _execute_search_query(self, query: LDAPQuery):
+        self.query = query
 
         self.results = self.search()
 
