@@ -90,6 +90,10 @@ def transform_ldap_model_dict(instance_data: dict):
 class LDAPTestCase(TestCase):
     databases = ['ldap']
 
+    def assertNumQueries(self, num, func=None, *args, using='ldap', **kwargs):
+        """Like assertNumQueries, but defaults to 'ldap' as the database alias."""
+        return super().assertNumQueries(num, func, *args, using=using, **kwargs)
+
     @staticmethod
     def _get_group_1_object():
         return LDAPGroup.objects.get(name=TEST_LDAP_GROUP_1.name)

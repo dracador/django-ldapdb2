@@ -1,6 +1,7 @@
 import enum
 import json
 import re
+from dataclasses import dataclass
 
 import ldap
 
@@ -91,6 +92,69 @@ class LDAPSearch:
     def as_json(self):
         # Mainly used for debugging
         return json.dumps(self.serialize(), indent=4, sort_keys=True)
+
+
+@dataclass
+class LDAPAddOp:
+    """A single add_s() call. modlist is [(attr, [values]), ...]."""
+
+    dn: str
+    modlist: list
+
+    def __str__(self):
+        attrs = ', '.join(attr for attr, _ in self.modlist)
+        return f'ADD {self.dn} ({attrs})'
+
+
+@dataclass
+class LDAPModifyOp:
+    """A single modify_s() call. modlist is [(mod_op, attr, value), ...]."""
+
+    dn: str
+    modlist: list
+
+    def __str__(self):
+        attrs = ', '.join(dict.fromkeys(attr for _op, attr, _val in self.modlist))
+        return f'MODIFY {self.dn} ({attrs})'
+
+
+@dataclass
+class LDAPDeleteOp:
+    """A single delete_s() call."""
+
+    dn: str
+
+    def __str__(self):
+        return f'DELETE {self.dn}'
+
+
+@dataclass
+class LDAPRenameOp:
+    """A single rename_s() call."""
+
+    dn: str
+    newrdn: str
+
+    def __str__(self):
+        return f'RENAME {self.dn} -> {self.newrdn}'
+
+
+@dataclass
+class LDAPRawSearchOp:
+    """
+    A single search_s() call whose raw [(dn, attrs)] result is returned unformatted
+    via the cursor's fetchall(). Used by the UPDATE read-before-write diff.
+
+    Unlike the LDAPQuery search path, NO_SUCH_OBJECT is *not* swallowed here.
+    The UPDATE compiler relies on it to fall through to INSERT.
+    """
+
+    dn: str
+    scope: int
+    attrlist: list | None = None
+
+    def __str__(self):
+        return f'SEARCH {self.dn} (scope={self.scope})'
 
 
 class LDAPDatabase:

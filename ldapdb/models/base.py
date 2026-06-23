@@ -8,7 +8,7 @@ from django.db.models import QuerySet
 from django.db.models.base import ModelState
 from django.db.models.sql import Query
 
-from ldapdb.backends.ldap.lib import LDAPScope, escape_ldap_rdn_chars
+from ldapdb.backends.ldap.lib import LDAPRenameOp, LDAPScope, escape_ldap_rdn_chars
 from ldapdb.exceptions import LDAPModelTypeError
 from ldapdb.iterables import (
     LDAPFlatValuesListIterable,
@@ -126,8 +126,7 @@ class LDAPModel(django_models.Model):
                 new_rdn = self.build_rdn(self.rdn_value, escape_chars=True)
                 conn = connections[using]
                 with conn.wrap_database_errors, conn.cursor() as cursor:
-                    ldap_conn = cursor.db.connection
-                    ldap_conn.rename_s(self.escaped_dn, new_rdn)
+                    cursor.execute(LDAPRenameOp(self.escaped_dn, new_rdn))  # type: ignore[arg-type]
                 self.dn = new_dn
 
         return super().save(*args, **kwargs)

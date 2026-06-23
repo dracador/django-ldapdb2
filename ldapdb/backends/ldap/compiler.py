@@ -2,7 +2,7 @@ import logging
 from typing import TYPE_CHECKING, Any, NamedTuple, cast
 
 import ldap
-from django.db import NotSupportedError
+from django.db import DatabaseError, NotSupportedError
 from django.db.models import Lookup
 from django.db.models.expressions import Col, Expression
 from django.db.models.fields import Field
@@ -17,7 +17,7 @@ from ldapdb.exceptions import LDAPModelTypeError
 from ldapdb.models import LDAPModel, LDAPQuery
 from ldapdb.models.fields import PrimaryDistinguishedNameField, UpdateStrategy
 from .ldif_helpers import AddRequest, ModifyRequest
-from .lib import LDAPSearch, LDAPSearchControlType
+from .lib import LDAPAddOp, LDAPDeleteOp, LDAPModifyOp, LDAPRawSearchOp, LDAPSearch, LDAPSearchControlType
 from .lookups import LDAP_OPERATORS
 
 try:
@@ -29,11 +29,20 @@ except ImportError:
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from ldap.ldapobject import ReconnectLDAPObject
-
     from .base import DatabaseWrapper
 
 logger = logging.getLogger(__name__)
+
+
+def _raised_no_such_object(exc: Exception) -> bool:
+    """
+    True if *exc* is (or wraps) ldap.NO_SUCH_OBJECT.
+
+    Routing writes through cursor.execute() means Django's CursorWrapper has already
+    translated the raw ldap.NO_SUCH_OBJECT into a django.db error by the time it reaches
+    the compiler; the original is preserved as __cause__.
+    """
+    return isinstance(exc, ldap.NO_SUCH_OBJECT) or isinstance(getattr(exc, '__cause__', None), ldap.NO_SUCH_OBJECT)
 
 
 class SelectInfo(NamedTuple):
@@ -59,26 +68,6 @@ class SQLCompiler(BaseSQLCompiler):
         self.annotation_aliases = []
         self.field_mapping = {field.attname: field.column for field in model._meta.fields}
         self.reverse_field_mapping = {field.column: field for field in model._meta.fields}
-
-    def _get_ldap_conn(self) -> 'ReconnectLDAPObject':
-        """
-        Makes sure the connection is established and returns the underlying LDAP connection object.
-        The alternative to this method would be to use something like the following:
-
-        with self.connection.cursor() as cursor:
-            cursor.db.connection.add_s(dn, add.as_modlist())
-
-        That however always builds a new cursor object, which is not needed here,
-        since we don't use anything in the cursor.
-        Maybe revisit this later if we need to use cursors for something else.
-        Something like django-debug-toolbar would use the cursor to display the executed queries,
-        but since we want to provide proper LDAP search/query information,
-        we'd have to implement custom handling via Signals or another solution, anyway.
-
-        Also: This works without ensure_connection() for django versions >= 5.1. Not for 4.2.
-        """
-        self.connection.ensure_connection()
-        return self.connection.connection
 
     def _pk_value_from_where(self):
         # only used in Update and Delete compilers
@@ -395,67 +384,68 @@ class SQLUpdateCompiler(compiler.SQLUpdateCompiler, SQLCompiler):
     def execute_sql(self, returning_fields=None):  # noqa: ARG002 - don't need returning_fields, we just force another search
         model = cast('LDAPModel', cast('object', self.query.model))
         db = self.connection
-        ldap_conn = self._get_ldap_conn()
         charset = db.charset
 
         pk_val = self._pk_value_from_where()
         dn = model.build_dn(pk_val, escape_chars=True)
 
-        with db.wrap_database_errors:
+        # One cursor for the search + modify pair so both count as separate query-log entries.
+        with db.wrap_database_errors, db.cursor() as cursor:
             try:
-                _, entry = ldap_conn.search_s(dn, ldap.SCOPE_BASE)[0]
-            except ldap.NO_SUCH_OBJECT:
+                cursor.execute(LDAPRawSearchOp(dn, ldap.SCOPE_BASE))  # type: ignore[arg-type]
+            except (ldap.NO_SUCH_OBJECT, DatabaseError) as exc:
                 # This might happen if an object is created via .save().
                 # Returning 0 here forces Django to use the SQLInsertCompiler.
-                return 0
+                if _raised_no_such_object(exc):
+                    return 0
+                raise
+            _, entry = cursor.fetchall()[0]
 
-        mod = ModifyRequest()
-        mod.charset = charset
+            mod = ModifyRequest()
+            mod.charset = charset
 
-        for field, _model, raw_val in self.query.values:
-            attr = field.column
-            old_vals: list[bytes] = entry.get(attr, [])
+            for field, _model, raw_val in self.query.values:
+                attr = field.column
+                old_vals: list[bytes] = entry.get(attr, [])
 
-            if raw_val is None:
-                new_vals = []
-            else:
-                prepped = field.get_db_prep_save(raw_val, db)
-                new_vals = list(prepped) if isinstance(prepped, list | tuple) else [prepped]
+                if raw_val is None:
+                    new_vals = []
+                else:
+                    prepped = field.get_db_prep_save(raw_val, db)
+                    new_vals = list(prepped) if isinstance(prepped, list | tuple) else [prepped]
 
-            if not getattr(field, 'binary_field', False):
-                old_vals = [v.decode(charset) if isinstance(v, bytes | bytearray) else v for v in old_vals]
-                new_vals = [v.decode(charset) if isinstance(v, bytes | bytearray) else v for v in new_vals]
+                if not getattr(field, 'binary_field', False):
+                    old_vals = [v.decode(charset) if isinstance(v, bytes | bytearray) else v for v in old_vals]
+                    new_vals = [v.decode(charset) if isinstance(v, bytes | bytearray) else v for v in new_vals]
 
-            if old_vals == new_vals:
-                continue
+                if old_vals == new_vals:
+                    continue
 
-            use_add_delete = (
-                getattr(field, 'update_strategy', UpdateStrategy.REPLACE) == UpdateStrategy.ADD_DELETE
-                and field.multi_valued_field
-            )
+                use_add_delete = (
+                    getattr(field, 'update_strategy', UpdateStrategy.REPLACE) == UpdateStrategy.ADD_DELETE
+                    and field.multi_valued_field
+                )
 
-            if not new_vals:
-                mod.delete(attr)
-            elif not old_vals:
-                mod.add(attr, new_vals)
-            elif use_add_delete:
-                to_add = set(new_vals) - set(old_vals)
-                to_delete = set(old_vals) - set(new_vals)
-                if to_add:
-                    mod.add(attr, to_add)
-                if to_delete:
-                    mod.delete(attr, to_delete)
-            else:
-                mod.replace(attr, new_vals)
+                if not new_vals:
+                    mod.delete(attr)
+                elif not old_vals:
+                    mod.add(attr, new_vals)
+                elif use_add_delete:
+                    to_add = set(new_vals) - set(old_vals)
+                    to_delete = set(old_vals) - set(new_vals)
+                    if to_add:
+                        mod.add(attr, to_add)
+                    if to_delete:
+                        mod.delete(attr, to_delete)
+                else:
+                    mod.replace(attr, new_vals)
 
-        if not mod.as_modlist():
-            logger.debug('No changes after diff for %s — skipping modify_s().', dn)
-            return 1
+            if not mod.as_modlist():
+                logger.debug('No changes after diff for %s — skipping modify.', dn)
+                return 1
 
-        logger.debug('LDAP modify request for %s\n%s', dn, mod)
-
-        with db.wrap_database_errors:
-            ldap_conn.modify_s(dn, mod.as_modlist())
+            logger.debug('LDAP modify request for %s\n%s', dn, mod)
+            cursor.execute(LDAPModifyOp(dn, mod.as_modlist()))  # type: ignore[arg-type]
 
         return 1
 
@@ -472,7 +462,6 @@ class SQLInsertCompiler(compiler.SQLInsertCompiler, SQLCompiler):
         obj = cast('LDAPModel', self.query.objs[0])
         model = cast('LDAPModel', cast('object', self.query.model))
         db = self.connection
-        ldap_conn = self._get_ldap_conn()
 
         # DN to use for LDAP operation
         dn = obj.build_dn_from_pk(escape_chars=True)
@@ -498,9 +487,9 @@ class SQLInsertCompiler(compiler.SQLInsertCompiler, SQLCompiler):
 
         logger.debug('LDAP add request for %s\n%s', dn, add)
 
-        with self.connection.wrap_database_errors:
+        with db.wrap_database_errors, db.cursor() as cursor:
             # make sure any exceptions bubble up as proper Django errors
-            ldap_conn.add_s(dn, add.as_modlist())
+            cursor.execute(LDAPAddOp(dn, add.as_modlist()))  # type: ignore[arg-type]
 
         # Set obj.dn only for representation in django space.
         obj.dn = obj.build_dn_from_pk(escape_chars=False)
@@ -517,19 +506,21 @@ class SQLDeleteCompiler(compiler.SQLDeleteCompiler, SQLCompiler):
         **_kwargs,
     ):
         model = cast('LDAPModel', cast('object', self.query.model))
-        ldap_conn = self._get_ldap_conn()
 
         pk_val = self._pk_value_from_where()
         dn = model.build_dn(pk_val, escape_chars=True)
 
         logger.debug('LDAP delete request for %s', dn)
 
-        with self.connection.wrap_database_errors:
+        with self.connection.wrap_database_errors, self.connection.cursor() as cursor:
             try:
-                ldap_conn.delete_s(dn)
+                cursor.execute(LDAPDeleteOp(dn))  # type: ignore[arg-type]
                 deleted_count = 1
-            except ldap.NO_SUCH_OBJECT:
-                deleted_count = 0
+            except (ldap.NO_SUCH_OBJECT, DatabaseError) as exc:
+                if _raised_no_such_object(exc):
+                    deleted_count = 0
+                else:
+                    raise
 
         if result_type is CURSOR:  # Django <= 5.1
             cur = self.connection.cursor()
