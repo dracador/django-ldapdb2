@@ -1,3 +1,4 @@
+from collections import deque
 from functools import cached_property
 
 import ldap
@@ -48,6 +49,33 @@ class DatabaseWrapper(BaseDatabaseWrapper):
 
     def _set_autocommit(self, autocommit):
         pass
+
+    def set_autocommit(self, autocommit, force_begin_transaction_with_broken_autocommit=False):
+        """
+        Toggle autocommit without logging a phantom BEGIN.
+
+        This backend has no wire-level transactions (_commit/_rollback/_set_autocommit are
+        no-ops), so the "BEGIN" that the default set_autocommit() logs via
+        debug_transaction() corresponds to zero LDAP round-trips. That marker is appended
+        straight to connection.queries_log while never passing through the cursor so it corrupts
+        query counting for stuff like assertNumQueries or django-debug-toolbar.
+        COMMIT/ROLLBACK don't have this problem as Django logs those from inside _commit()/_rollback(),
+        which we just no-op above.
+
+        The phantom BEGIN only surfaces on Django < 5.1, where supports_transactions is False,
+        so TestCase doesn't hold an outer atomic block and operations like QuerySet.delete()
+        (which wrap their work in transaction.atomic()) flip autocommit themselves.
+
+        We can route that one log entry to a throwaway buffer for the duration of the call instead of
+        reimplementing the base method, so we don't drift if Django changes its internals.
+        Real LDAP operations are logged via the Cursor/CursorWrapper.
+        """
+        saved_log = self.queries_log
+        self.queries_log = deque(maxlen=0)
+        try:
+            super().set_autocommit(autocommit, force_begin_transaction_with_broken_autocommit)
+        finally:
+            self.queries_log = saved_log
 
     @cached_property
     def charset(self):
