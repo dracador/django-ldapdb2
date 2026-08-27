@@ -5,7 +5,7 @@ description = "LDAP database backend for Django"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "Django>=4.2",           # https://docs.djangoproject.com/en/stable/releases/
+    "Django>=5.2",           # https://docs.djangoproject.com/en/stable/releases/
     "python-ldap>=3.3",      # https://github.com/python-ldap/python-ldap/releases
     "typing-extensions ; python_version < '3.12'",
     # "passlib" was the defacto standard library for handling encryption,
