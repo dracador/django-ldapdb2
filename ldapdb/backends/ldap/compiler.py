@@ -269,7 +269,9 @@ class SQLCompiler(BaseSQLCompiler):
             # TODO: Maybe swap to Simple Pagination when order_by is unset?
             pk_field = self.query.model._meta.pk
             ordering_rule = getattr(pk_field, 'ordering_rule', None)
-            ordering_rules.append((pk_field.db_column, ordering_rule if ordering_rule else self.DEFAULT_ORDERING_RULE))
+
+            attrname = pk_field.db_column if self.query.standard_ordering else f'-{pk_field.db_column}'
+            ordering_rules.append((attrname, ordering_rule if ordering_rule else self.DEFAULT_ORDERING_RULE))
 
         logger.debug('Order by fields for LDAP query: %s', ordering_rules)
         return ordering_rules
