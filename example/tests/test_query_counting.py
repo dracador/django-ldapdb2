@@ -63,3 +63,11 @@ class QueryCountingTestCase(LDAPTestCase):
         # rename + search (read-before-write diff) + modify
         with self.assertNumQueries(3):
             user.save()
+
+    def test_save_of_missing_object_is_two_queries(self):
+        # The update compiler does a read before any writes.
+        # If it raises NO_SUCH_OBJECT, it'll fall through to the
+        # insert compiler
+        user = create_random_ldap_user(do_not_create=True)
+        with self.assertNumQueries(2):
+            user.save()
