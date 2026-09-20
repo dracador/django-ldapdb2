@@ -117,6 +117,8 @@ class LDAPModelIterable(LDAPBaseIterable, ModelIterable):
         return obj.__dict__.copy()  # Copy to avoid mutating original
 
     def _dict_to_output(self, row_dict: dict, *_) -> 'Model':
+        # We implicitly drop the fetch mode on django6.1+ here,
+        # but since we're not using any relations, we can safely ignore it.
         model_cls = self.queryset.model
         return model_cls.from_db(
             self.queryset.db,
