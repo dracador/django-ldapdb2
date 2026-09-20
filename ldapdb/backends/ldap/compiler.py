@@ -371,6 +371,10 @@ class SQLCompiler(BaseSQLCompiler):
             with_col_aliases=with_col_aliases or bool(self.query.combinator),
         )
 
+        if self.query.combined_queries:
+            # TODO: Support combined queries
+            raise NotSupportedError('For now, combined queries are not supported')
+
         self.query.annotation_aliases = self.annotation_aliases
         self.query.ldap_search = self._build_ldap_search(with_limits)
 
