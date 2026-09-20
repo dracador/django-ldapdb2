@@ -3,7 +3,7 @@ from django.test import TestCase
 from ldapdb.backends.ldap.cursor import _sort_and_slice_ldap_results
 from ldapdb.backends.ldap.lib import LDAPSearchControlType
 
-from .base import LDAPTestCase
+from .base import LDAPTestCase, queryset_to_ldap_search
 from .constants import TEST_LDAP_AVAILABLE_USERS
 
 
@@ -214,8 +214,6 @@ class TestNoControlOrdering(LDAPTestCase):
 
 
 class TestQuerySetOrdering(LDAPTestCase):
-    """End-to-end tests using the normal QuerySet API — control type chosen by server capabilities."""
-
     def test_order_by_ascending_returns_sorted_results(self):
         users = list(self.get_testuser_objects().order_by('username'))
         usernames = [u.username for u in users]
@@ -237,3 +235,22 @@ class TestQuerySetOrdering(LDAPTestCase):
         second = list(self.get_testuser_objects().order_by('username')[1:2])
         self.assertEqual(len(second), 1)
         self.assertEqual(second[0].username, all_users[1].username)
+
+
+class TestFirstAndLast(LDAPTestCase):
+    """
+    Starting with 6.1, django stopped rewriting first()/last() into order_by('pk')/order_by('-pk')
+    when the ordering was explicitly cleared with an empty order_by().
+    last() now calls reverse() instead, which only inverts Query.standard_ordering without adding an ordering.
+    """
+
+    def test_last_without_ordering_returns_highest_pk(self):
+        usernames = sorted(u.username for u in TEST_LDAP_AVAILABLE_USERS)
+        self.assertEqual(
+            self.get_testuser_objects().order_by().last().username,
+            usernames[-1],
+        )
+
+    def test_reverse_without_ordering_inverts_pk_on_fallback(self):
+        ldap_search = queryset_to_ldap_search(self.get_testuser_objects().order_by().reverse())
+        self.assertEqual(ldap_search.ordering_rules, [('-uid', 'caseIgnoreOrderingMatch')])

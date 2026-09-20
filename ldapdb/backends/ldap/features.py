@@ -75,6 +75,8 @@ class DatabaseFeatures(BaseDatabaseFeatures):
     supports_collation_on_textfield = False
     supports_non_deterministic_collations = False
     supports_unlimited_charfield = True  # not sure if this is dependent on the ldap server
+    supports_bit_aggregations = False
+    supports_inspectdb = False  # TODO: Continue work on the inspectdb branch
 
     # Maybe also implement django_test_expected_failures & django_test_skips?
 

@@ -251,3 +251,9 @@ class SQLCompilerTestCase(LDAPTestCase):
         results = list(LDAPUser.objects.filter(department_number=1))
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0].username, TEST_LDAP_USER_1.username)
+
+    def test_from_db_accepts_fetch_mode(self):
+        instance = LDAPUser.from_db('ldap', ['username'], ['user1'], fetch_mode=None)
+        self.assertEqual(instance.username, 'user1')
+        self.assertFalse(instance._state.adding)
+        self.assertEqual(instance._state.db, 'ldap')
