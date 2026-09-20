@@ -46,7 +46,7 @@ def eval_lookup(expr: Lookup, instance):
     return py_fn(lhs_val, rhs_val)
 
 
-def eval_expr(expr: Expression, instance):  # noqa: PLR0911
+def eval_expr(expr: Expression, instance):  # noqa: PLR0911, PLR0912
     match expr:
         case Col(target=field):
             return getattr(instance, field.attname)

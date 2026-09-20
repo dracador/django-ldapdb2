@@ -443,7 +443,7 @@ class SQLUpdateCompiler(compiler.SQLUpdateCompiler, SQLCompiler):
                     mod.replace(attr, new_vals)
 
             if not mod.as_modlist():
-                logger.debug('No changes after diff for %s — skipping modify.', dn)
+                logger.debug('No changes after diff for %s, skipping modify.', dn)
                 return 1
 
             logger.debug('LDAP modify request for %s\n%s', dn, mod)

@@ -38,9 +38,10 @@ def _sort_and_slice_ldap_results(
     """
     Sort and slice a list of raw LDAP results in Python.
 
-    Used as a fallback when the server does not support SSSVLV. Ordering rule OIDs
-    are ignored — sorting is lexicographic on the raw bytes value, which is correct
-    for string attributes but not for numeric or language-specific ordering rules.
+    Used as a fallback when the server does not support SSSVLV.
+    We cannot use the OIDs in ordering_rules, so we just sort lexicographic on the raw bytes.
+    This results in correct ordering for strings but not for numeric attributes.
+    # TODO: also handle numeric ordering
     """
     if ordering_rules:
         def _compare(a: tuple[str, dict], b: tuple[str, dict]) -> int:
