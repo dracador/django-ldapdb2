@@ -36,6 +36,9 @@ class DatabaseFeatures(BaseDatabaseFeatures):
     supports_order_by_nulls_modifier = False  # we probably could implement this in python
     allows_auto_pk_0 = False
     supports_sequence_reset = False
+    supports_select_union = True
+    supports_select_intersection = True
+    supports_select_difference = True
 
     # TODO: Check if we want/need introspection. Maybe for inspectdb?
     can_introspect_default = False

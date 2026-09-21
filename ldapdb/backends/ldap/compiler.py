@@ -4,18 +4,18 @@ from typing import TYPE_CHECKING, Any, NamedTuple, cast
 import ldap
 from django.db import DatabaseError, NotSupportedError
 from django.db.models import Lookup
-from django.db.models.expressions import Col, Expression
+from django.db.models.expressions import Col, Combinable, Expression, OrderBy, Ref
 from django.db.models.fields import Field
 from django.db.models.lookups import Exact, In
 from django.db.models.sql import compiler
-from django.db.models.sql.compiler import PositionRef, SQLCompiler as BaseSQLCompiler
+from django.db.models.sql.compiler import SQLCompiler as BaseSQLCompiler
 from django.db.models.sql.constants import CURSOR, GET_ITERATOR_CHUNK_SIZE, MULTI
 from django.db.models.sql.where import NothingNode, WhereNode
 from ldap.filter import escape_filter_chars
 
 from ldapdb.exceptions import LDAPModelTypeError
 from ldapdb.models import LDAPModel, LDAPQuery
-from ldapdb.models.fields import PrimaryDistinguishedNameField, UpdateStrategy
+from ldapdb.models.fields import LDAPField, PrimaryDistinguishedNameField, UpdateStrategy
 from .ldif_helpers import AddRequest, ModifyRequest
 from .lib import LDAPAddOp, LDAPDeleteOp, LDAPModifyOp, LDAPRawSearchOp, LDAPSearch, LDAPSearchControlType
 from .lookups import LDAP_OPERATORS
@@ -238,7 +238,79 @@ class SQLCompiler(BaseSQLCompiler):
             else:
                 return f'({ldap_operator}{combined_filter})'
 
+    def _combined_branch_compilers(self) -> list['SQLCompiler']:
+        """
+        To support stuff like .union(), .intersection() and .difference(), we need to evaluate
+        multiple queries inside of self.query.combined_queries.
+
+        Using only the self.query part would lead to only handling the left hand side.
+        Example:
+             q1 = LDAPUser.objects.filter(username='user1')
+             q2 = LDAPUser.objects.filter(username='user2')
+             q3 = q1.union(q2)
+             ^- q3 here would just evaluate to q1.
+        """
+        inner_compilers = [
+            query.get_compiler(self.using, self.connection, self.elide_empty) for query in self.query.combined_queries
+        ]
+
+        model = self.query.model
+
+        reference = inner_compilers[0].query  # the left hand side
+        for inner_query in (inner_compiler.query for inner_compiler in inner_compilers):
+            if inner_query.model is not model:
+                raise NotSupportedError(
+                    f'Combining querysets of different models is not supported by the LDAP backend. '
+                    f'{model.__name__} and {inner_query.model.__name__} may differ in base_dn, search_scope '
+                    f'or base_filter, so they cannot become one search.'
+                )
+            if inner_query.is_sliced:
+                raise NotSupportedError(
+                    'Slicing inside of a combined queryset is not supported by the LDAP backend. '
+                    'Apply the slicing to the combined queryset instead.'
+                )
+            if inner_query.where and self._extract_primary_dn_value(inner_query.where) is not None:
+                raise NotSupportedError(
+                    'Filtering inside of a combined queryset on the primary DN field is not supported. '
+                    'The DN is used as the search base, which all queries have to share.'
+                )
+
+            selects_match = (
+                (inner_query.selected is None or inner_query.selected == reference.selected)
+                and inner_query.deferred_loading == reference.deferred_loading
+                and tuple(inner_query.annotation_select) == tuple(reference.annotation_select)
+            )
+            if not selects_match:
+                raise NotSupportedError('All individual queries of a combined queryset must select the same fields. ')
+
+        return inner_compilers
+
+    def _compile_combined_where(self) -> str:
+        combinator = self.query.combinator
+        if combinator not in ('union', 'intersection', 'difference'):
+            raise NotSupportedError(f'{combinator}() is not supported by the LDAP backend.')
+
+        if combinator == 'union' and self.query.combinator_all:
+            raise NotSupportedError(
+                'union(all=True) is not supported by the LDAP backend. Since an LDAP search cannot return '
+                'the same entry twice, so there are no duplicates to be preserved.'
+            )
+
+        filters = [branch._compile_where() for branch in self._combined_branch_compilers()]
+
+        if combinator == 'union':
+            return f'(|{"".join(filters)})'
+        if combinator == 'intersection':
+            return f'(&{"".join(filters)})'
+
+        head, *subtracted = filters
+        negated = ''.join(f'(!{ldap_filter})' for ldap_filter in subtracted)
+        return f'(&{head}{negated})'
+
     def _compile_where(self):
+        if self.query.combinator:
+            return self._compile_combined_where()
+
         base_filter = getattr(self.query.model, 'base_filter', '(objectClass=*)')
         where_node = self.query.where
         if not where_node:
@@ -253,25 +325,26 @@ class SQLCompiler(BaseSQLCompiler):
 
     def _compile_order_by(self) -> list[tuple[str, str]]:
         ordering_rules = []
-        for order_expr, _order_data in self.get_order_by():
-            order_expr: Col | PositionRef
-            if not isinstance(order_expr.expression, Col | PositionRef):
-                raise NotImplementedError(f'Unsupported order expression type: {type(order_expr.expression)}')
+        for expr, _order_data in self.get_order_by():
+            order_by = cast('OrderBy', expr)
 
-            attrname = order_expr.field.column
-            ordering_rule = getattr(order_expr.field, 'ordering_rule', None)
-            if order_expr.descending:
-                attrname = f'-{attrname}'
-            ordering_rules.append((attrname, ordering_rule if ordering_rule else self.DEFAULT_ORDERING_RULE))
+            expression: Combinable = order_by.expression
+            if isinstance(expression, Ref):
+                # combined querysets (e.g. union + order_by) + bare union via Meta.ordering on django 6.1+
+                expression = expression.get_source_expressions()[0]
+            if not isinstance(expression, Col):
+                raise NotImplementedError(f'Unsupported order expression type: {type(order_by.expression)}')
+
+            field = cast('LDAPField', expression.target)
+            attrname = f'-{field.column}' if order_by.descending else field.column
+            ordering_rules.append((attrname, field.ordering_rule or self.DEFAULT_ORDERING_RULE))
 
         if not ordering_rules:
             # Use the primary key as a fallback if no order_by is specified. We need some kind of ordering for SSSVLV.
             # TODO: Maybe swap to Simple Pagination when order_by is unset?
-            pk_field = self.query.model._meta.pk
-            ordering_rule = getattr(pk_field, 'ordering_rule', None)
-
+            pk_field = cast('LDAPField', self.query.model._meta.pk)
             attrname = pk_field.db_column if self.query.standard_ordering else f'-{pk_field.db_column}'
-            ordering_rules.append((attrname, ordering_rule if ordering_rule else self.DEFAULT_ORDERING_RULE))
+            ordering_rules.append((attrname, pk_field.ordering_rule or self.DEFAULT_ORDERING_RULE))
 
         logger.debug('Order by fields for LDAP query: %s', ordering_rules)
         return ordering_rules
@@ -331,7 +404,11 @@ class SQLCompiler(BaseSQLCompiler):
         # check if the query filters on the primary DN field
         base = self.query.model.base_dn
         scope = self.query.model.search_scope
-        dn_value = self._extract_primary_dn_value(self.query.where) if self.query.where else None
+        dn_value = None
+
+        if self.query.where and not self.query.combinator:
+            dn_value = self._extract_primary_dn_value(self.query.where)
+
         if dn_value:
             base = dn_value
             scope = ldap.SCOPE_BASE
@@ -370,10 +447,6 @@ class SQLCompiler(BaseSQLCompiler):
         self.pre_sql_setup(
             with_col_aliases=with_col_aliases or bool(self.query.combinator),
         )
-
-        if self.query.combined_queries:
-            # TODO: Support combined queries
-            raise NotSupportedError('For now, combined queries are not supported')
 
         self.query.annotation_aliases = self.annotation_aliases
         self.query.ldap_search = self._build_ldap_search(with_limits)
@@ -537,4 +610,22 @@ class SQLDeleteCompiler(compiler.SQLDeleteCompiler, SQLCompiler):
 
 
 class SQLAggregateCompiler(compiler.SQLAggregateCompiler, SQLCompiler):
-    pass
+    def as_sql(self, with_limits=True, with_col_aliases=False) -> tuple[LDAPQuery, tuple]:
+        """
+        Django translates aggregates over combined querysets into subqueries.
+        Since LDAP has no subqueries, we gotta unwrap the AggregateQuery.
+        """
+        inner_query: LDAPQuery = self.query.inner_query
+
+        if inner_query.is_sliced:
+            raise NotSupportedError('Aggregating over a sliced queryset is not supported by the LDAP backend. ')
+
+        inner_query.annotations = self.query.annotations
+        inner_query.default_cols = False
+        inner_query.select = ()
+        inner_query.set_annotation_mask(self.query.annotation_select)
+        inner_query.subquery = False
+
+        self.col_count = len(self.query.annotation_select)
+        inner_compiler = inner_query.get_compiler(self.using, self.connection, self.elide_empty)
+        return inner_compiler.as_sql(with_limits=with_limits, with_col_aliases=with_col_aliases)
