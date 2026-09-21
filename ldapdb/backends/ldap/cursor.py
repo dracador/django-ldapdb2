@@ -18,6 +18,7 @@ from .lib import (
     LDAPModifyOp,
     LDAPRawSearchOp,
     LDAPRenameOp,
+    LDAPSearch,
     LDAPSearchControlType,
     unescape_ldap_dn_chars,
 )
@@ -98,7 +99,7 @@ class DatabaseCursor:
     """
 
     def __init__(self, connection, settings_dict: dict | None = None):
-        self.connection: ReconnectLDAPObject | None = connection
+        self.connection: ReconnectLDAPObject = connection
         self.settings_dict: dict = settings_dict or {}
         self.query: LDAPQuery | None = None
         self.description = None
@@ -112,8 +113,16 @@ class DatabaseCursor:
         self._result_iter = iter([])
 
     @property
-    def search_obj(self):
+    def search_obj(self) -> LDAPSearch:
+        if self.query is None or self.query.ldap_search is None:
+            raise LDAPDatabase.DatabaseError('No query has been executed on this cursor')
         return self.query.ldap_search
+
+    @property
+    def ldap_query(self) -> LDAPQuery:
+        if self.query is None:
+            raise LDAPDatabase.DatabaseError('No query has been executed on this cursor')
+        return self.query
 
     def search(self):
         # noinspection PyUnreachableCode
@@ -299,17 +308,18 @@ class DatabaseCursor:
         return rdata
 
     def set_description(self):
+        annotation_aliases = self.ldap_query.annotation_aliases
         field_names = []
         if self.results:
             if self.search_obj.attrlist:
                 field_names.extend(self.search_obj.attrlist)
-            elif not self.query.annotation_aliases:
+            elif not annotation_aliases:
                 # Only prepend DN when the row would otherwise be empty
                 # *and* the query has no annotations.
                 field_names.append('dn')
 
-        if self.query.annotation_aliases:
-            field_names.extend(self.query.annotation_aliases)
+        if annotation_aliases:
+            field_names.extend(annotation_aliases)
 
         self.description = [(attr, None, None, None, None, None, None) for attr in field_names]
 
@@ -370,7 +380,6 @@ class DatabaseCursor:
 
     def close(self):
         logger.debug('DatabaseCursor.close: Closing cursor')
-        self.connection = None
         self.closed = True
         self.query = None
         self.results = []
