@@ -58,3 +58,92 @@ cn: Group1
 member: uid=admin,ou=Users,dc=example,dc=org
 member: uid=user1,ou=Users,dc=example,dc=org
 ou: group1
+
+dn: ou=Inspection,dc=example,dc=org
+objectClass: top
+objectClass: organizationalUnit
+ou: Inspection
+
+dn: ou=Users,ou=Inspection,dc=example,dc=org
+objectClass: top
+objectClass: organizationalUnit
+ou: Users
+
+dn: uid=inspect1,ou=Users,ou=Inspection,dc=example,dc=org
+objectClass: x-extendedUser
+objectClass: inetOrgPerson
+objectClass: organizationalPerson
+objectClass: person
+objectClass: top
+cn: Inspect One
+sn: One
+givenName: Inspect
+mail: inspect.one@example.org
+uid: inspect1
+userPassword: inspect1password
+departmentNumber: 1
+x-user-isActive: TRUE
+x-user-dateTime: 20240102030405Z
+x-user-multiValue: alpha
+x-user-multiValue: beta
+
+dn: uid=inspect2,ou=Users,ou=Inspection,dc=example,dc=org
+objectClass: x-extendedUser
+objectClass: inetOrgPerson
+objectClass: organizationalPerson
+objectClass: person
+objectClass: top
+cn: Inspect Two
+sn: Two
+givenName: Inspect
+mail: inspect.two@example.org
+uid: inspect2
+userPassword: inspect2password
+x-user-isActive: FALSE
+x-user-dateTime: 20240203040506Z
+x-user-multiValue: gamma
+
+dn: uid=inspect3,ou=Users,ou=Inspection,dc=example,dc=org
+objectClass: x-extendedUser
+objectClass: inetOrgPerson
+objectClass: organizationalPerson
+objectClass: person
+objectClass: top
+cn: Inspect Three
+sn: Three
+mail: inspect.three@example.org
+uid: inspect3
+userPassword: inspect3password
+x-user-isActive: TRUE
+x-user-dateTime: 20240304050607Z
+
+dn: uid=inspect4,ou=Users,ou=Inspection,dc=example,dc=org
+objectClass: inetOrgPerson
+objectClass: organizationalPerson
+objectClass: person
+objectClass: top
+cn: Inspect Four
+sn: Four
+uid: inspect4
+
+dn: ou=MixedRDN,ou=Inspection,dc=example,dc=org
+objectClass: top
+objectClass: organizationalUnit
+ou: MixedRDN
+
+dn: uid=mixed1,ou=MixedRDN,ou=Inspection,dc=example,dc=org
+objectClass: inetOrgPerson
+cn: Mixed One
+sn: One
+uid: mixed1
+
+dn: uid=mixed2,ou=MixedRDN,ou=Inspection,dc=example,dc=org
+objectClass: inetOrgPerson
+cn: Mixed Two
+sn: Two
+uid: mixed2
+
+dn: cn=Mixed Three,ou=MixedRDN,ou=Inspection,dc=example,dc=org
+objectClass: inetOrgPerson
+cn: Mixed Three
+sn: Three

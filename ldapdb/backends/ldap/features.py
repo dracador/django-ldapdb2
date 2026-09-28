@@ -40,7 +40,6 @@ class DatabaseFeatures(BaseDatabaseFeatures):
     supports_select_intersection = True
     supports_select_difference = True
 
-    # TODO: Check if we want/need introspection. Maybe for inspectdb?
     can_introspect_default = False
     can_introspect_foreign_keys = False
     introspected_field_types = {}
@@ -79,7 +78,10 @@ class DatabaseFeatures(BaseDatabaseFeatures):
     supports_non_deterministic_collations = False
     supports_unlimited_charfield = True  # not sure if this is dependent on the ldap server
     supports_bit_aggregations = False
-    supports_inspectdb = False  # TODO: Continue work on the inspectdb branch
+
+    # We cannot properly use the default inspectdb command.
+    # Use the `inspectldap` management command, instead.
+    supports_inspectdb = False
 
     # Maybe also implement django_test_expected_failures & django_test_skips?
 

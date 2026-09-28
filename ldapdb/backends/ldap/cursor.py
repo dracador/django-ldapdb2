@@ -45,6 +45,7 @@ def _sort_and_slice_ldap_results(
     # TODO: also handle numeric ordering
     """
     if ordering_rules:
+
         def _compare(a: tuple[str, dict], b: tuple[str, dict]) -> int:
             dn_a, attrs_a = a
             dn_b, attrs_b = b
@@ -173,12 +174,30 @@ class DatabaseCursor:
         elif isinstance(op, LDAPRawSearchOp):
             # Raw, unformatted [(dn, attrs)] for the UPDATE read-before-write diff.
             # NO_SUCH_OBJECT must propagate so the compiler can fall through to INSERT.
-            results = self.connection.search_s(op.dn, op.scope, attrlist=op.attrlist)
+            results = self._execute_raw_search(op)
             self.results = results
             self.rowcount = len(results)
             self._result_iter = iter(results)
         else:
             raise LDAPQueryTypeError(op)
+
+    def _execute_raw_search(self, op: LDAPRawSearchOp) -> list[tuple[str, dict]]:
+        if not op.sizelimit:
+            return self.connection.search_s(op.dn, op.scope, filterstr=op.filterstr, attrlist=op.attrlist)
+
+        msgid = self.connection.search_ext(op.dn, op.scope, filterstr=op.filterstr, attrlist=op.attrlist)
+        results: list[tuple[str, dict]] = []
+        try:
+            while len(results) < op.sizelimit:
+                rtype, rdata, _rmsgid, _ctrls = self.connection.result3(msgid, all=0, timeout=-1)
+                if rtype == ldap.RES_SEARCH_RESULT:
+                    return results
+
+                results.extend((dn, attrs) for dn, attrs in rdata if dn is not None)
+        finally:
+            if len(results) >= op.sizelimit:
+                self.connection.abandon(msgid)
+        return results[: op.sizelimit]
 
     def _reset_results(self):
         self.results = []

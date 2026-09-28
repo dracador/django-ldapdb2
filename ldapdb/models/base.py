@@ -43,6 +43,8 @@ class LDAPQuery(Query):
         Normal __str__ method calls self.sql_with_params(),
         which is not compatible with LDAP.
         """
+        if self.ldap_search is None:
+            return f'{self.__class__}.ldap_search: <not compiled>'
         return f'{self.__class__}.ldap_search: {self.ldap_search.serialize()}'
 
 

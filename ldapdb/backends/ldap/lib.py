@@ -152,6 +152,8 @@ class LDAPRawSearchOp:
     dn: str
     scope: int
     attrlist: list | None = None
+    filterstr: str = '(objectClass=*)'
+    sizelimit: int = 0
 
     def __str__(self):
         return f'SEARCH {self.dn} (scope={self.scope})'
