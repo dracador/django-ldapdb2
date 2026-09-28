@@ -37,6 +37,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'ldapdb',  # provides the inspectldap management command
     'example',
     'tests',
 ]
