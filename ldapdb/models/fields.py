@@ -2,7 +2,7 @@ import enum
 import re
 from collections.abc import Callable, Sequence
 from datetime import date, datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Any, Generic, Literal, TypeVar, overload
+from typing import TYPE_CHECKING, Any, Generic, Literal, NoReturn, TypeVar, overload
 from zoneinfo import ZoneInfo
 
 from django.conf import settings
@@ -335,12 +335,17 @@ class BinaryField(django_fields.BinaryField, LDAPField[bytes, '_MultiBinaryField
     binary_field = True
 
 
-class BooleanField(django_fields.BooleanField, LDAPField[bool, '_MultiBooleanField']):
+class BooleanField(django_fields.BooleanField, LDAPField[bool, NoReturn]):
     """
     LDAP stores boolean values as 'TRUE' and 'FALSE'.
     Returns True if field is 'TRUE', None if field.null=True, and 'FALSE' otherwise.
     Default value is None if field.null=True but can be overridden by setting default=True or False.
     """
+
+    def __init__(self, *args, **kwargs):
+        if kwargs.get('multi_valued_field'):
+            raise ValueError(f'{self.__class__.__name__} does not support multi_valued_field=True')
+        super().__init__(*args, **kwargs)
 
     def from_db_value(self, value, expression, connection):
         raw = super().from_db_value(value, expression, connection)
@@ -654,10 +659,6 @@ if TYPE_CHECKING:
     class _MultiBinaryField(_MultiValued[bytes], BinaryField):
         _pyi_private_set_type: list[bytes]  # type: ignore[assignment]
         _pyi_private_get_type: list[bytes]  # type: ignore[assignment]
-
-    class _MultiBooleanField(_MultiValued[bool], BooleanField):
-        _pyi_private_set_type: list[bool]  # type: ignore[assignment]
-        _pyi_private_get_type: list[bool]  # type: ignore[assignment]
 
     class _MultiIntegerField(_MultiValued[int], IntegerField):
         _pyi_private_set_type: list[int]  # type: ignore[assignment]
