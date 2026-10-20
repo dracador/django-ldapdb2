@@ -91,10 +91,10 @@ class LDAPQuerySet(QuerySet):
 
 
 class LDAPModel(django_models.Model):
-    base_dn: str = None
+    base_dn: str
     base_filter: str = '(objectClass=*)'  # the base filter will be always be applied to all queries
     search_scope: LDAPScope = ldap.SCOPE_SUBTREE
-    object_classes: list[str] = None  # TODO: object_classes should be a ListField of some sort
+    object_classes: list[str]  # TODO: object_classes should be a ListField of some sort
 
     objects = LDAPQuerySet.as_manager()
 
