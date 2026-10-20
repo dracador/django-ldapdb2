@@ -46,7 +46,7 @@ module-root = ""
 #
 [tool.pyrefly]
 project-includes = ["ldapdb", "example"]
-preset = "basic"
+preset = "default"
 
 ######################################################################################
 # ruff
