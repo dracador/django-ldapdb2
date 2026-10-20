@@ -395,7 +395,7 @@ LDAP_PASSWORD_HANDLERS = {
     LDAPPasswordAlgorithm.SSHA512: ldap_salted_sha512.hash,
     LDAPPasswordAlgorithm.PBKDF2_SHA256: ldap_pbkdf2_sha256.hash,
     LDAPPasswordAlgorithm.PBKDF2_SHA512: ldap_pbkdf2_sha512.hash,
-    LDAPPasswordAlgorithm.ARGON2: lambda pw, **options: f'{{ARGON2}}{argon2.using(**options).hash(pw)}',
+    LDAPPasswordAlgorithm.ARGON2: lambda pw, **options: f'{{ARGON2}}{argon2.using(**options).hash(pw)}',  # pyrefly: ignore[missing-attribute]
     LDAPPasswordAlgorithm.PLAINTEXT: lambda pw, **_: pw,
 }
 
@@ -436,7 +436,7 @@ class PasswordField(CharField):
 
     def check(self, **kwargs):
         errors = super().check(**kwargs)
-        if str(self.algorithm) == LDAPPasswordAlgorithm.ARGON2.value:
+        if self.algorithm == LDAPPasswordAlgorithm.ARGON2:
             errors.extend(self._check_installed_argon2())
         return errors
 
@@ -453,13 +453,14 @@ class PasswordField(CharField):
 
     @staticmethod
     def generate_password_hash(password: str, algorithm: LDAPPasswordAlgorithm | str, **options) -> str:
-        handler = LDAP_PASSWORD_HANDLERS.get(algorithm)
-        if not handler:
+        try:
+            handler = LDAP_PASSWORD_HANDLERS[LDAPPasswordAlgorithm(algorithm)]
+        except ValueError:
             raise ValueError(
                 f'No handler found for algorithm: {algorithm}. '
-                f'Supported algorithms: {", ".join(LDAP_PASSWORD_HANDLERS.keys())}.'
+                f'Supported algorithms: {", ".join(LDAP_PASSWORD_HANDLERS.keys())}. '
                 f'Or supply your own handler via the `handler` argument.'
-            )
+            ) from None
 
         # Note: Support for passing settings via .hash() will be removed in Passlib 2.0.
         # Since we're not sure about the future of passlib, we'll keep it as-is for now.
