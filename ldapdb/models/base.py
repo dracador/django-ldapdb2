@@ -21,6 +21,7 @@ from ldapdb.typing_compat import Self, override
 from .fields import PasswordField, PrimaryDistinguishedNameField
 
 if TYPE_CHECKING:
+    from django.db.models.fetch_modes import FetchMode
     from django.db.models.options import Options
 
     from ldapdb.backends.ldap import LDAPSearch
@@ -136,7 +137,12 @@ class LDAPModel(django_models.Model):
     @override
     @classmethod
     def from_db(
-        cls, db: str | None, field_names: Collection[str], values: Collection[Any], fetch_mode: Any = None
+        cls,
+        db: str | None,
+        field_names: Collection[str],
+        values: Collection[Any],
+        *,
+        fetch_mode: 'FetchMode | None' = None,
     ) -> Self:
         instance = cls.__new__(cls)
         instance.__dict__.update(dict(zip(field_names, values, strict=False)))
@@ -145,7 +151,7 @@ class LDAPModel(django_models.Model):
         instance._state.adding = False
         instance._state.db = db
         if fetch_mode is not None:
-            instance._state.fetch_mode = fetch_mode
+            instance._state.fetch_mode = fetch_mode  # pyrefly: ignore[read-only]
         return instance
 
     @classmethod
