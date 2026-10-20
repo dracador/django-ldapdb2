@@ -47,6 +47,7 @@ module-root = ""
 [tool.pyrefly]
 preset = "default"
 project-includes = ["ldapdb", "example"]
+search-path = ["typings"]
 
 ######################################################################################
 # ruff
