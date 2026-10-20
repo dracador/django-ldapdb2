@@ -135,7 +135,9 @@ class LDAPModel(django_models.Model):
 
     @override
     @classmethod
-    def from_db(cls, db: str, field_names: Collection[str], values: Collection[Any], fetch_mode: Any = None) -> Self:
+    def from_db(
+        cls, db: str | None, field_names: Collection[str], values: Collection[Any], fetch_mode: Any = None
+    ) -> Self:
         instance = cls.__new__(cls)
         instance.__dict__.update(dict(zip(field_names, values, strict=False)))
 

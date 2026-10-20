@@ -30,11 +30,9 @@ from ldapdb.typing_compat import Self, override
 from ldapdb.validators import validate_dn
 
 if TYPE_CHECKING:
+    from django.db.backends.base.base import BaseDatabaseWrapper
     from django.db.models import Model
     from django.db.models.fields import _FieldDescriptor
-
-    from ldapdb.backends.ldap.base import DatabaseWrapper
-    from ldapdb.models import LDAPModel
 
 _T = TypeVar('_T')
 _M = TypeVar('_M')
@@ -218,7 +216,9 @@ class LDAPField(django_fields.Field, Generic[_T, _M]):
         return name, path, args, kwargs
 
     @override
-    def get_db_prep_value(self, value: Any, connection: 'DatabaseWrapper', prepared: bool = False) -> list[bytes | str]:
+    def get_db_prep_value(
+        self, value: Any, connection: 'BaseDatabaseWrapper', prepared: bool = False
+    ) -> list[bytes | str]:
         """Prepare a value for DB interaction.
 
         Returns:
@@ -253,7 +253,7 @@ class LDAPField(django_fields.Field, Generic[_T, _M]):
 
         return unique_values
 
-    def get_db_prep_save(self, value, connection: 'DatabaseWrapper'):
+    def get_db_prep_save(self, value, connection: 'BaseDatabaseWrapper'):
         values = self.get_db_prep_value(value, connection, prepared=False)
         if self.binary_field:
             # Already raw values; don't encode it twice.
@@ -468,7 +468,7 @@ class PasswordField(CharField):
         return value
 
     @override
-    def pre_save(self, model_instance: 'LDAPModel', add: bool):
+    def pre_save(self, model_instance: 'Model', add: bool):
         """
         Called just before the field value is sent to the database.
         We use this to hash the plaintext and update the instance attribute.
@@ -480,7 +480,7 @@ class PasswordField(CharField):
             setattr(model_instance, self.attname, hashed_value)
         return hashed_value
 
-    def get_db_prep_save(self, value: str, connection: 'DatabaseWrapper'):
+    def get_db_prep_save(self, value: str, connection: 'BaseDatabaseWrapper'):
         value = self._hash_if_needed(value)
         return super().get_db_prep_save(value, connection)
 
