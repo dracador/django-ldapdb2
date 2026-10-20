@@ -49,6 +49,13 @@ preset = "default"
 project-includes = ["ldapdb", "example"]
 search-path = ["typings"]
 
+[tool.pyrefly.errors]
+# We often want to use our own subclassed Query, DatabaseWrapper, DatabaseConnection,
+# but pyrefly complains because it theoretically narrows them.
+# We do actually do use our own classes at runtime,
+# but the type checker can't properly infer that
+bad-override-mutable-attribute = false
+
 ######################################################################################
 # ruff
 #
