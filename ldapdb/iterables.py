@@ -1,7 +1,6 @@
-from collections import namedtuple
 from collections.abc import Iterator
 from types import SimpleNamespace
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 from django.db import NotSupportedError
 from django.db.models.expressions import Col, F
@@ -13,6 +12,7 @@ from django.db.models.query import (
     ValuesIterable,
     ValuesListIterable,
 )
+from django.db.models.utils import create_namedtuple_class
 
 from ldapdb.backends.ldap.expressions import eval_expr
 
@@ -177,10 +177,9 @@ class LDAPFlatValuesListIterable(LDAPBaseIterable, FlatValuesListIterable):
 
 
 class LDAPNamedValuesListIterable(LDAPBaseIterable, NamedValuesListIterable):
-    def _row_to_dict(self, named: 'namedtuple', *_) -> dict:
+    def _row_to_dict(self, named: NamedTuple, *_) -> dict:
         data = named._asdict()
         return data
 
-    def _dict_to_output(self, row_dict: dict, columns: list[str]) -> 'namedtuple':
-        NamedRow = namedtuple('Row', columns)
-        return NamedRow(*(row_dict[col] for col in columns))
+    def _dict_to_output(self, row_dict: dict, columns: list[str]) -> NamedTuple:
+        return create_namedtuple_class(*columns)(*(row_dict[col] for col in columns))
