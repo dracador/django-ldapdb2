@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 
 
 class LDAPQuery(Query):
-    model: 'LDAPModel'
+    model: type['LDAPModel']  # pyrefly: ignore[bad-override-mutable-attribute]
 
     def __init__(self, model, **kwargs):
         super().__init__(model, **kwargs)
@@ -49,7 +49,7 @@ class LDAPQuery(Query):
 
 
 class LDAPQuerySet(QuerySet):
-    query: LDAPQuery
+    query: LDAPQuery  # pyrefly: ignore[bad-override-mutable-attribute]
 
     def __init__(self, model=None, query=None, using=None, hints=None):
         if query is None:
