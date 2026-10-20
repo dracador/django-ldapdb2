@@ -33,6 +33,14 @@ dev = [
     "tblib>=3.2.2",  # needed to run tests parallel
 ]
 
+[build-system]
+requires = ["uv_build>=0.13.4,<0.14"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "ldapdb"
+module-root = ""
+
 ######################################################################################
 # ruff
 #
