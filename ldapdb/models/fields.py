@@ -136,7 +136,7 @@ class LDAPField(django_fields.Field, Generic[_T, _M]):
         """
         return None
 
-    def from_db_value(self, value, expression, connection) -> bytes | str | list[str] | None:  # noqa: ARG002
+    def from_db_value(self, value, expression, connection) -> Any:  # noqa: ARG002
         if value is None:
             if self.null:
                 return value
@@ -595,7 +595,7 @@ class DateTimeField(LDAPField[datetime, '_MultiDateTimeField'], django_fields.Da
         self.include_tz = include_tz
         super().__init__(*args, **kwargs)
 
-    def from_db_value(self, value, expression, connection):
+    def from_db_value(self, value, expression, connection) -> datetime | None:
         value = super().from_db_value(value, expression, connection)
         if value is None:
             return None
@@ -629,8 +629,8 @@ class DateField(LDAPField[date, '_MultiDateField'], django_fields.DateField):
     We keep this seperate from DateTimeField because some integration check the field type via isinstance().
     """
 
-    def from_db_value(self, *args, **kwargs) -> date | None:
-        value: str = super().from_db_value(*args, **kwargs)
+    def from_db_value(self, value, expression, connection) -> date | None:
+        value = super().from_db_value(value, expression, connection)
         if value is None:
             return None
 
