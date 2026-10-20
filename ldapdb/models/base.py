@@ -8,7 +8,7 @@ from django.db.models import QuerySet
 from django.db.models.base import ModelState
 from django.db.models.sql import Query
 
-from ldapdb.backends.ldap.lib import LDAPRenameOp, LDAPScope, escape_ldap_rdn_chars
+from ldapdb.backends.ldap.lib import LDAPRenameOp, escape_ldap_rdn_chars
 from ldapdb.exceptions import LDAPModelTypeError
 from ldapdb.iterables import (
     LDAPFlatValuesListIterable,
@@ -94,7 +94,7 @@ class LDAPQuerySet(QuerySet):
 class LDAPModel(django_models.Model):
     base_dn: str
     base_filter: str = '(objectClass=*)'  # the base filter will be always be applied to all queries
-    search_scope: LDAPScope = ldap.SCOPE_SUBTREE
+    search_scope: int = ldap.SCOPE_SUBTREE
     object_classes: list[str]  # TODO: object_classes should be a ListField of some sort
 
     objects = LDAPQuerySet.as_manager()
