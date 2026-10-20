@@ -2,7 +2,7 @@ import enum
 import re
 from collections.abc import Callable
 from datetime import date, datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Generic, Literal, Protocol, TypeVar, overload, runtime_checkable
 from zoneinfo import ZoneInfo
 
 from django.conf import settings
@@ -26,12 +26,34 @@ from passlib.handlers.pbkdf2 import (
 )
 
 from ldapdb.backends.ldap.lib import escape_ldap_dn_chars, unescape_ldap_dn_chars
-from ldapdb.typing_compat import override
+from ldapdb.typing_compat import Self, override
 from ldapdb.validators import validate_dn
 
 if TYPE_CHECKING:
+    from django.db.models import Model
+    from django.db.models.fields import _FieldDescriptor
+
     from ldapdb.backends.ldap.base import DatabaseWrapper
     from ldapdb.models import LDAPModel
+
+_T = TypeVar('_T')
+_M = TypeVar('_M')
+
+if TYPE_CHECKING:
+
+    class _MultiValued(django_fields.Field, Generic[_T]):
+        # This is currently the only way to get proper typing for multi-valued fields.
+        # At the time of writing, pyrefly is the only type checker that can handle `_pyi_private_get_type`,
+        # which is provided by django-stubs. It'll then ignore the generic params of the fields.
+        # pyrefly is also the only one that adds a ` | None` for `null=True` fields.
+        # Also see `LDAPField` + `_MultiCharField` and friends.
+        @overload
+        def __get__(self, instance: None, owner: Any) -> _FieldDescriptor[Self]: ...
+        @overload
+        def __get__(self, instance: Model, owner: Any) -> list[_T]: ...
+        @overload
+        def __get__(self, instance: Any, owner: Any) -> Self: ...
+        def __get__(self, instance: Any, owner: Any) -> Any: ...
 
 
 class UpdateStrategy(str, enum.Enum):
@@ -45,13 +67,31 @@ class RenderLookupProtocol(Protocol):
         """Convert the value passed to the QuerySet filter to an LDAP filter string."""
 
 
-class LDAPField(django_fields.Field, RenderLookupProtocol):
+class LDAPField(django_fields.Field, RenderLookupProtocol, Generic[_T, _M]):
     apply_default_on_empty: bool = False
     binary_field: bool = False
     multi_valued_field: bool = False
     ordering_rule: str | None = None
     read_only: bool = False
     update_strategy: UpdateStrategy = UpdateStrategy.REPLACE
+
+    if TYPE_CHECKING:
+
+        @overload
+        def __new__(cls, *args: Any, multi_valued_field: Literal[True], **kwargs: Any) -> _M: ...
+        @overload
+        def __new__(cls, *args: Any, multi_valued_field: Literal[False] | None = None, **kwargs: Any) -> Self: ...
+        @overload
+        def __new__(cls, *args: Any, multi_valued_field: bool | None = None, **kwargs: Any) -> Self | _M: ...
+        def __new__(cls, *args: Any, **kwargs: Any) -> Any: ...
+
+        @overload
+        def __get__(self, instance: None, owner: Any) -> _FieldDescriptor[Self]: ...
+        @overload
+        def __get__(self, instance: Model, owner: Any) -> _T: ...
+        @overload
+        def __get__(self, instance: Any, owner: Any) -> Self: ...
+        def __get__(self, instance: Any, owner: Any) -> Any: ...
 
     def __init__(
         self,
@@ -221,7 +261,7 @@ class LDAPField(django_fields.Field, RenderLookupProtocol):
             return [str(v).encode() for v in values]
 
 
-class CharField(django_fields.CharField, LDAPField):
+class CharField(django_fields.CharField, LDAPField[str, '_MultiCharField']):
     def __init__(self, *args, **kwargs):
         defaults = {'max_length': 200}
         defaults.update(kwargs)
@@ -286,14 +326,15 @@ class PrimaryDistinguishedNameField(DistinguishedNameField):
     Lookups on this field are converted to SCOPE_BASE searches by the compiler,
     instead of generating (dn=...) filters.
     """
+
     _allowed_lookups = {'exact', 'iexact', 'in', 'isnull'}
 
 
-class BinaryField(django_fields.BinaryField, LDAPField):
+class BinaryField(django_fields.BinaryField, LDAPField[bytes, '_MultiBinaryField']):
     binary_field = True
 
 
-class BooleanField(django_fields.BooleanField, LDAPField):
+class BooleanField(django_fields.BooleanField, LDAPField[bool, '_MultiBooleanField']):
     """
     LDAP stores boolean values as 'TRUE' and 'FALSE'.
     Returns True if field is 'TRUE', None if field.null=True, and 'FALSE' otherwise.
@@ -316,7 +357,7 @@ class EmailField(django_fields.EmailField, CharField):
     pass
 
 
-class IntegerField(django_fields.IntegerField, LDAPField):
+class IntegerField(django_fields.IntegerField, LDAPField[int, '_MultiIntegerField']):
     def __init__(self, *args, **kwargs):
         kwargs['null'] = True
         super().__init__(*args, **kwargs)
@@ -449,6 +490,18 @@ class MemberField(DistinguishedNameField):
     update_strategy = UpdateStrategy.ADD_DELETE
     apply_default_on_empty = True
 
+    if TYPE_CHECKING:
+        _pyi_private_set_type: list[str]  # type: ignore[assignment]
+        _pyi_private_get_type: list[str]  # type: ignore[assignment]
+
+        @overload
+        def __get__(self, instance: None, owner: Any) -> _FieldDescriptor[Self]: ...  # type: ignore[override]
+        @overload
+        def __get__(self, instance: Model, owner: Any) -> list[str]: ...
+        @overload
+        def __get__(self, instance: Any, owner: Any) -> Self: ...
+        def __get__(self, instance: Any, owner: Any) -> Any: ...
+
     # No custom get_db_prep_value needed; base class handles defaults.
     def from_db_value(self, value, expression, connection):
         """Convert DB value to Python value, filtering out placeholder values."""
@@ -530,7 +583,7 @@ def format_generalized_time(dt: date | datetime, include_tz: bool = False) -> st
     return dt.strftime('%Y%m%d%H%M%SZ')
 
 
-class DateTimeField(LDAPField, django_fields.DateTimeField):
+class DateTimeField(LDAPField[datetime, '_MultiDateTimeField'], django_fields.DateTimeField):
     default_date_format = '%Y-%m-%d %H:%M:%S %z'
 
     def __init__(self, *args, fmt: str | None = None, include_tz: bool = False, **kwargs):
@@ -566,7 +619,7 @@ class DateTimeField(LDAPField, django_fields.DateTimeField):
         return value
 
 
-class DateField(LDAPField, django_fields.DateField):
+class DateField(LDAPField[date, '_MultiDateField'], django_fields.DateField):
     """
     LDAP-specific DateField that handles LDAP GeneralizedTime strings and normalizes to date objects.
     We keep this seperate from DateTimeField because some integration check the field type via isinstance().
@@ -591,3 +644,30 @@ class DateField(LDAPField, django_fields.DateField):
             value = value.date()
 
         return format_generalized_time(value, include_tz=False)
+
+
+if TYPE_CHECKING:
+
+    class _MultiCharField(_MultiValued[str], CharField):
+        _pyi_private_set_type: list[str]  # type: ignore[assignment]
+        _pyi_private_get_type: list[str]  # type: ignore[assignment]
+
+    class _MultiBinaryField(_MultiValued[bytes], BinaryField):
+        _pyi_private_set_type: list[bytes]  # type: ignore[assignment]
+        _pyi_private_get_type: list[bytes]  # type: ignore[assignment]
+
+    class _MultiBooleanField(_MultiValued[bool], BooleanField):
+        _pyi_private_set_type: list[bool]  # type: ignore[assignment]
+        _pyi_private_get_type: list[bool]  # type: ignore[assignment]
+
+    class _MultiIntegerField(_MultiValued[int], IntegerField):
+        _pyi_private_set_type: list[int]  # type: ignore[assignment]
+        _pyi_private_get_type: list[int]  # type: ignore[assignment]
+
+    class _MultiDateTimeField(_MultiValued[datetime], DateTimeField):
+        _pyi_private_set_type: list[datetime]  # type: ignore[assignment]
+        _pyi_private_get_type: list[datetime]  # type: ignore[assignment]
+
+    class _MultiDateField(_MultiValued[date], DateField):
+        _pyi_private_set_type: list[date]  # type: ignore[assignment]
+        _pyi_private_get_type: list[date]  # type: ignore[assignment]
