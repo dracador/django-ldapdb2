@@ -27,8 +27,6 @@ except ImportError:
     ROW_COUNT = 'row count'
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
-
     from .base import DatabaseWrapper
 
 logger = logging.getLogger(__name__)
@@ -147,11 +145,10 @@ class SQLCompiler(BaseSQLCompiler):
 
         lookup_type = lookup.lookup_name
 
-        render: Callable[[str, str, Any], str | None] | None = getattr(lhs.field, 'render_lookup', None)
-        if callable(render):
-            ldap_filter: str = render(field_name, lookup_type, rhs)
-            if ldap_filter is not None:
-                return ldap_filter
+        if isinstance(lhs.field, LDAPField):
+            custom_filter = lhs.field.render_lookup(field_name, lookup_type, rhs)
+            if custom_filter is not None:
+                return custom_filter
 
         operator_format, _ = LDAP_OPERATORS.get(lookup_type, (None, None))
 

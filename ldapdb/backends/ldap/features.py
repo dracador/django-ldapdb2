@@ -1,3 +1,4 @@
+import logging
 from functools import cached_property
 from typing import TYPE_CHECKING
 
@@ -11,6 +12,8 @@ from ldapdb.backends.ldap.controls import LDAP_OID_TRANSACTION_END, LDAP_OID_TRA
 
 if TYPE_CHECKING:
     from ldap.ldapobject import ReconnectLDAPObject
+
+logger = logging.getLogger(__name__)
 
 
 class DatabaseFeatures(BaseDatabaseFeatures):
@@ -86,10 +89,14 @@ class DatabaseFeatures(BaseDatabaseFeatures):
     # Maybe also implement django_test_expected_failures & django_test_skips?
 
     @cached_property
-    def rootdse_data(self) -> dict:
+    def rootdse_data(self) -> dict[str, list[bytes]]:
         with self.connection.cursor() as cursor:
             conn: ReconnectLDAPObject = cursor.connection
-            return conn.read_rootdse_s()
+            rootdse = conn.read_rootdse_s()
+        if rootdse is None:
+            logger.debug('DatabaseFeatures.rootdse_data: rootDSE not readable, assuming no optional features')
+            return {}
+        return rootdse
 
     @cached_property
     def supported_ldap_versions(self) -> set[int]:
@@ -174,7 +181,7 @@ class DatabaseFeatures(BaseDatabaseFeatures):
         return self.supports_sss and self.supports_vlv
 
     @cached_property
-    def can_use_chunked_reads(self) -> bool:
+    def can_use_chunked_reads(self) -> bool:  # pyrefly: ignore[bad-override]
         # In theory, we could also set this to True if the server supports the Paged Results control.
         # However, it's pretty useless without the SSS & VLV controls since we can't do any ordering and the use case
         # for an unordered paginitation is more of an exception than the rule.
