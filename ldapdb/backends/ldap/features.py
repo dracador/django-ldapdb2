@@ -181,7 +181,7 @@ class DatabaseFeatures(BaseDatabaseFeatures):
         return self.supports_sss and self.supports_vlv
 
     @cached_property
-    def can_use_chunked_reads(self) -> bool:
+    def can_use_chunked_reads(self) -> bool:  # pyrefly: ignore[bad-override]
         # In theory, we could also set this to True if the server supports the Paged Results control.
         # However, it's pretty useless without the SSS & VLV controls since we can't do any ordering and the use case
         # for an unordered paginitation is more of an exception than the rule.
