@@ -1,6 +1,6 @@
 import enum
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import date, datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, Generic, Literal, TypeVar, overload
 from zoneinfo import ZoneInfo
@@ -234,7 +234,7 @@ class LDAPField(django_fields.Field, Generic[_T, _M]):
             return value
 
         if value is None:
-            values: list[Any] = []
+            values: Sequence[Any] = []
         else:
             if self.multi_valued_field and not isinstance(value, list | tuple):
                 value = [value]
@@ -294,7 +294,7 @@ class DistinguishedNameField(CharField):
     _allowed_lookups = {'exact', 'iexact', 'in', 'isnull'}
     default_validators = [validate_dn]
 
-    def get_lookup(self, lookup_name: str) -> Lookup | None:
+    def get_lookup(self, lookup_name: str) -> type[Lookup] | None:
         if lookup_name not in self._allowed_lookups:
             raise FieldError(
                 f'Lookup {lookup_name} is not supported for DN fields. '
@@ -541,20 +541,18 @@ def parse_generalized_time(s: str) -> datetime:
     if not m:
         raise ValueError(f'Invalid GeneralizedTime value: {s!r}')
 
-    parts = {k: int(v) if v and k not in ['frac', 'tz'] else v for k, v in m.groupdict().items()}
-
     # Missing components default to minimal valid value (RFC says that is OK)
     dt = datetime(
-        parts['year'],
-        parts['mon'] or 1,
-        parts['day'] or 1,
-        parts['hour'] or 0,
-        parts['minute'] or 0,
-        parts['second'] or 0,
-        int(float(f'0.{parts["frac"]}') * 1_000_000) if parts['frac'] else 0,
+        int(m['year']),
+        int(m['mon'] or 1),
+        int(m['day'] or 1),
+        int(m['hour'] or 0),
+        int(m['minute'] or 0),
+        int(m['second'] or 0),
+        int(float(f'0.{m["frac"]}') * 1_000_000) if m['frac'] else 0,
     )
 
-    tz = parts['tz']
+    tz = m['tz']
     if tz == 'Z' or tz is None:
         dt = dt.replace(tzinfo=ZoneInfo('UTC'))
     else:
