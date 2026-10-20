@@ -2,7 +2,7 @@ import enum
 import re
 from collections.abc import Callable
 from datetime import date, datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Any, Generic, Literal, Protocol, TypeVar, overload, runtime_checkable
+from typing import TYPE_CHECKING, Any, Generic, Literal, TypeVar, overload
 from zoneinfo import ZoneInfo
 
 from django.conf import settings
@@ -61,13 +61,7 @@ class UpdateStrategy(str, enum.Enum):
     REPLACE = 'REPLACE'  # single (MOD_REPLACE)
 
 
-@runtime_checkable
-class RenderLookupProtocol(Protocol):
-    def render_lookup(self, field_name: str, lookup_name: str, value: Any) -> str | None:
-        """Convert the value passed to the QuerySet filter to an LDAP filter string."""
-
-
-class LDAPField(django_fields.Field, RenderLookupProtocol, Generic[_T, _M]):
+class LDAPField(django_fields.Field, Generic[_T, _M]):
     apply_default_on_empty: bool = False
     binary_field: bool = False
     multi_valued_field: bool = False
@@ -136,6 +130,13 @@ class LDAPField(django_fields.Field, RenderLookupProtocol, Generic[_T, _M]):
             self.editable = False
             self.null = True
             self.read_only = read_only
+
+    def render_lookup(self, field_name: str, lookup_name: str, value: Any) -> str | None:  # noqa: ARG002
+        """
+        Convert the value passed to the QuerySet filter to an LDAP filter string.
+        Return None to let the backend build the filter the default way.
+        """
+        return None
 
     def from_db_value(self, value, expression, connection) -> bytes | str | list[str] | None:  # noqa: ARG002
         if value is None:
