@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NoReturn
 
 from django.db.backends.base.operations import BaseDatabaseOperations
 
@@ -47,20 +47,16 @@ class DatabaseOperations(BaseDatabaseOperations):
         return str(sql)
 
     # We *could* implement the following methods, but they are not necessary for the LDAP backend
-    def date_extract_sql(self, lookup_type, field_name, **kwargs):
-        # LDAP does not support date extraction
+    def date_extract_sql(self, lookup_type: str, sql: str, params: Any) -> NoReturn:
         raise NotImplementedError('LDAP does not support date extraction')
 
-    def date_trunc_sql(self, lookup_type, field_name, **kwargs):
-        # LDAP does not support date truncation
+    def date_trunc_sql(self, lookup_type: str, sql: str, params: Any, tzname: str | None = None) -> NoReturn:
         raise NotImplementedError('LDAP does not support date truncation')
 
-    def time_trunc_sql(self, lookup_type, field_name, **kwargs):
-        # LDAP does not support time truncation
+    def time_trunc_sql(self, lookup_type: str, sql: str, params: Any, tzname: str | None = None) -> NoReturn:
         raise NotImplementedError('LDAP does not support time truncation')
 
-    def datetime_trunc_sql(self, lookup_type, field_name, **kwargs):
-        # LDAP does not support datetime truncation
+    def datetime_trunc_sql(self, lookup_type: str, sql: str, params: Any, tzname: str | None) -> NoReturn:
         raise NotImplementedError('LDAP does not support datetime truncation')
 
     def prepare_sql_script(self, sql):
