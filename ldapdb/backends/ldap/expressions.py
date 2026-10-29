@@ -1,7 +1,7 @@
 from operator import add, mod, mul, sub, truediv
 
-from django.db.models import Case, F, Value
-from django.db.models.expressions import Col, Expression
+from django.db.models import Case, Value
+from django.db.models.expressions import Col
 from django.db.models.functions import (
     Abs,
     Coalesce,
@@ -39,14 +39,18 @@ def eval_lookup(expr: Lookup, instance):
     lhs_val = eval_expr(expr.lhs, instance)
     rhs_val = expr.rhs
 
-    if expr.lookup_name == "in" and not isinstance(rhs_val, list | tuple | set):
+    if expr.lookup_name == 'in' and not isinstance(rhs_val, list | tuple | set):
         rhs_val = list(rhs_val)
 
-    _, py_fn = LDAP_OPERATORS[expr.lookup_name]
+    lookup_name = expr.lookup_name
+    if lookup_name is None or lookup_name not in LDAP_OPERATORS:
+        raise NotImplementedError(f'Lookup {expr.__class__.__name__} not supported')
+
+    _, py_fn = LDAP_OPERATORS[lookup_name]
     return py_fn(lhs_val, rhs_val)
 
 
-def eval_expr(expr: Expression, instance):  # noqa: PLR0911, PLR0912
+def eval_expr(expr: object, instance):  # noqa: PLR0911
     match expr:
         case Col(target=field):
             return getattr(instance, field.attname)
@@ -56,9 +60,6 @@ def eval_expr(expr: Expression, instance):  # noqa: PLR0911, PLR0912
 
         case Value(value=v):
             return v
-
-        case F(name=field_name):
-            return getattr(instance, field_name)
 
         case Lower() | Upper() | Trim() | LTrim() | RTrim():
             base = eval_expr(expr.source_expressions[0], instance)
@@ -138,10 +139,10 @@ def eval_expr(expr: Expression, instance):  # noqa: PLR0911, PLR0912
         #    func = _ARITHM_OPS[op]
         #    return func(lhs, rhs)
 
-        case WhereNode(children=children, connector="AND", negated=False):
+        case WhereNode(children=children, connector='AND', negated=False):
             return all(eval_expr(c, instance) for c in children)
 
-        case WhereNode(children=children, connector="OR", negated=False):
+        case WhereNode(children=children, connector='OR', negated=False):
             return any(eval_expr(c, instance) for c in children)
 
         case Case():

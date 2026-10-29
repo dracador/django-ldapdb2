@@ -25,7 +25,7 @@ class LDAPSearch:
         base: str,
         filterstr: str = '(objectClass=*)',
         attrlist: list[str] | None = None,
-        scope: LDAPScope = ldap.SCOPE_SUBTREE,
+        scope: int = ldap.SCOPE_SUBTREE,
         ordering_rules: list[tuple[str, str]] | None = None,
         control_type: LDAPSearchControlType = LDAPSearchControlType.NO_CONTROL,
         limit: int = 0,  # 0 means no limit. Corresponds to (high_mark - low_mark) in Django,
@@ -266,7 +266,7 @@ def escape_ldap_rdn_chars(value: str) -> str:
 
     Note: "#" only has to be escaped when it's at the start or end of an RDN (for openLDAP at least).
     """
-    return LDAP_ESCAPE_RE.sub(lambda m: f"\\{ord(m.group()):02X}", value)
+    return LDAP_ESCAPE_RE.sub(lambda m: f'\\{ord(m.group()):02X}', value)
 
 
 def escape_ldap_dn_chars(value: str):

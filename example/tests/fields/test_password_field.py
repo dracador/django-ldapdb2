@@ -47,6 +47,10 @@ class PasswordFieldModelWithMultiPasswordField(LDAPPasswordMixin, BaseLDAPTestUs
     alt_password = PasswordField(db_column='description', algorithm=LDAPPasswordAlgorithm.ARGON2)
 
 
+class PasswordFieldModelWithUnknownAlgorithm(LDAPPasswordMixin, BaseLDAPTestUser):
+    password = PasswordField(db_column='userPassword', algorithm='UNKNOWN')
+
+
 ARGON_RE = re.compile(r'^\{ARGON2}\$argon2(?:id|i|d)\$v=\d+\$m=(?P<m>\d+),t=(?P<t>\d+),p=(?P<p>\d+)\$')
 PBKDF2_SHA512_RE = re.compile(r'^\{PBKDF2-SHA512}(?P<rounds>\d+)\$(?P<salt>[a-zA-Z0-9+/.]+)\$.*$')
 
@@ -186,7 +190,12 @@ class PasswordFieldTests(LDAPTestCase):
         self.assertTrue(user.alt_password.startswith('{ARGON2}'))
 
     def test_set_password_with_multi_fields_not_specified(self):
-        password = str(secrets.token_hex(8))
+        password = secrets.token_hex(8)
         user = PasswordFieldModelWithMultiPasswordField(username=generate_random_username(), password='')
         with self.assertRaises(ValueError):
             user.set_password(password)
+
+    def test_password_field_unknown_algorithm(self):
+        instance = PasswordFieldModelWithUnknownAlgorithm(username=generate_random_username())
+        with self.assertRaises(ValueError):
+            instance.set_password('secret')

@@ -8,7 +8,7 @@ from django.db.models import QuerySet
 from django.db.models.base import ModelState
 from django.db.models.sql import Query
 
-from ldapdb.backends.ldap.lib import LDAPRenameOp, LDAPScope, escape_ldap_rdn_chars
+from ldapdb.backends.ldap.lib import LDAPRenameOp, escape_ldap_rdn_chars
 from ldapdb.exceptions import LDAPModelTypeError
 from ldapdb.iterables import (
     LDAPFlatValuesListIterable,
@@ -21,13 +21,14 @@ from ldapdb.typing_compat import Self, override
 from .fields import PasswordField, PrimaryDistinguishedNameField
 
 if TYPE_CHECKING:
+    from django.db.models.fetch_modes import FetchMode
     from django.db.models.options import Options
 
     from ldapdb.backends.ldap import LDAPSearch
 
 
 class LDAPQuery(Query):
-    model: 'LDAPModel'
+    model: type['LDAPModel']
 
     def __init__(self, model, **kwargs):
         super().__init__(model, **kwargs)
@@ -91,10 +92,10 @@ class LDAPQuerySet(QuerySet):
 
 
 class LDAPModel(django_models.Model):
-    base_dn: str = None
+    base_dn: str
     base_filter: str = '(objectClass=*)'  # the base filter will be always be applied to all queries
-    search_scope: LDAPScope = ldap.SCOPE_SUBTREE
-    object_classes: list[str] = None  # TODO: object_classes should be a ListField of some sort
+    search_scope: int = ldap.SCOPE_SUBTREE
+    object_classes: list[str]  # TODO: object_classes should be a ListField of some sort
 
     objects = LDAPQuerySet.as_manager()
 
@@ -135,7 +136,14 @@ class LDAPModel(django_models.Model):
 
     @override
     @classmethod
-    def from_db(cls, db: str, field_names: Collection[str], values: Collection[Any], fetch_mode: Any = None) -> Self:
+    def from_db(
+        cls,
+        db: str | None,
+        field_names: Collection[str],
+        values: Collection[Any],
+        *,
+        fetch_mode: 'FetchMode | None' = None,
+    ) -> Self:
         instance = cls.__new__(cls)
         instance.__dict__.update(dict(zip(field_names, values, strict=False)))
 
@@ -143,7 +151,7 @@ class LDAPModel(django_models.Model):
         instance._state.adding = False
         instance._state.db = db
         if fetch_mode is not None:
-            instance._state.fetch_mode = fetch_mode
+            instance._state.fetch_mode = fetch_mode  # pyrefly: ignore[read-only]
         return instance
 
     @classmethod

@@ -1,7 +1,7 @@
 import functools
 import json
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import ldap
 from django.db.models import Count
@@ -109,8 +109,7 @@ class DatabaseCursor:
         self.closed = False
         self.lastrowid = None
 
-        # results can be either a list of tuples (dn, attributes) or a list of integers (count)
-        self.results: list[tuple[str, dict]] | list[tuple[int]] = []
+        self.results: list[tuple[Any, ...]] = []
         self._result_iter = iter([])
 
     @property
@@ -207,7 +206,7 @@ class DatabaseCursor:
     def _execute_search_query(self, query: LDAPQuery):
         self.query = query
 
-        self.results = self.search()
+        entries: list[tuple[str, dict]] = self.search()
 
         if (
             not self.query.group_by
@@ -219,22 +218,22 @@ class DatabaseCursor:
             # This is a special case for count queries like LDAPUser.objects.count(),
             # where we only return the count of results.
             alias = next(iter(self.query.annotations))
-            self.results = [(len(self.results),)]
+            self.results = [(len(entries),)]
             self.description = [(alias, None, None, None, None, None, None)]
             self.rowcount = 1
             self._result_iter = iter(self.results)
             return
 
         if self.search_obj.control_type != LDAPSearchControlType.SSSVLV:
-            self.results = _sort_and_slice_ldap_results(
-                self.results,
+            entries = _sort_and_slice_ldap_results(
+                entries,
                 self.search_obj.ordering_rules,
                 self.search_obj.offset,
                 self.search_obj.limit,
             )
 
-        self.set_description()
-        self.format_results()
+        self.set_description(entries)
+        self.results = self.format_results(entries)
         self.rowcount = len(self.results)
         self._result_iter = iter(self.results)
 
@@ -326,10 +325,10 @@ class DatabaseCursor:
             raise
         return rdata
 
-    def set_description(self):
+    def set_description(self, entries: list[tuple[str, dict]]):
         annotation_aliases = self.ldap_query.annotation_aliases
         field_names = []
-        if self.results:
+        if entries:
             if self.search_obj.attrlist:
                 field_names.extend(self.search_obj.attrlist)
             elif not annotation_aliases:
@@ -342,11 +341,11 @@ class DatabaseCursor:
 
         self.description = [(attr, None, None, None, None, None, None) for attr in field_names]
 
-    def format_results(self):
+    def format_results(self, entries: list[tuple[str, dict]]) -> list[tuple[Any, ...]]:
         column_names = [col[0] for col in self.description]
 
         results = []
-        for dn, attributes in self.results:
+        for dn, attributes in entries:
             # dn might contain hexadecimal characters, so decode it first
             dn = unescape_ldap_dn_chars(dn)
 
@@ -360,7 +359,7 @@ class DatabaseCursor:
             # sort rows in the correct order that is defined by the column names in description<
             row = tuple(row_data[col] for col in column_names)
             results.append(row)
-        self.results = results
+        return results
 
     def executemany(self, query, param_list):
         logger.debug('DatabaseCursor.executemany: query: %s, param_list: %s', query, param_list)

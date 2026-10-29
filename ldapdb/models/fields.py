@@ -1,8 +1,8 @@
 import enum
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import date, datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Generic, Literal, NoReturn, TypeVar, overload
 from zoneinfo import ZoneInfo
 
 from django.conf import settings
@@ -26,12 +26,32 @@ from passlib.handlers.pbkdf2 import (
 )
 
 from ldapdb.backends.ldap.lib import escape_ldap_dn_chars, unescape_ldap_dn_chars
-from ldapdb.typing_compat import override
+from ldapdb.typing_compat import Self, override
 from ldapdb.validators import validate_dn
 
 if TYPE_CHECKING:
-    from ldapdb.backends.ldap.base import DatabaseWrapper
-    from ldapdb.models import LDAPModel
+    from django.db.backends.base.base import BaseDatabaseWrapper
+    from django.db.models import Model
+    from django.db.models.fields import _FieldDescriptor
+
+_T = TypeVar('_T')
+_M = TypeVar('_M')
+
+if TYPE_CHECKING:
+
+    class _MultiValued(django_fields.Field, Generic[_T]):
+        # This is currently the only way to get proper typing for multi-valued fields.
+        # At the time of writing, pyrefly is the only type checker that can handle `_pyi_private_get_type`,
+        # which is provided by django-stubs. It'll then ignore the generic params of the fields.
+        # pyrefly is also the only one that adds a ` | None` for `null=True` fields.
+        # Also see `LDAPField` + `_MultiCharField` and friends.
+        @overload
+        def __get__(self, instance: None, owner: Any) -> _FieldDescriptor[Self]: ...
+        @overload
+        def __get__(self, instance: Model, owner: Any) -> list[_T]: ...
+        @overload
+        def __get__(self, instance: Any, owner: Any) -> Self: ...
+        def __get__(self, instance: Any, owner: Any) -> Any: ...
 
 
 class UpdateStrategy(str, enum.Enum):
@@ -39,19 +59,31 @@ class UpdateStrategy(str, enum.Enum):
     REPLACE = 'REPLACE'  # single (MOD_REPLACE)
 
 
-@runtime_checkable
-class RenderLookupProtocol(Protocol):
-    def render_lookup(self, field_name: str, lookup_name: str, value: Any) -> str | None:
-        """Convert the value passed to the QuerySet filter to an LDAP filter string."""
-
-
-class LDAPField(django_fields.Field, RenderLookupProtocol):
+class LDAPField(django_fields.Field, Generic[_T, _M]):
     apply_default_on_empty: bool = False
     binary_field: bool = False
     multi_valued_field: bool = False
     ordering_rule: str | None = None
     read_only: bool = False
     update_strategy: UpdateStrategy = UpdateStrategy.REPLACE
+
+    if TYPE_CHECKING:
+
+        @overload
+        def __new__(cls, *args: Any, multi_valued_field: Literal[True], **kwargs: Any) -> _M: ...
+        @overload
+        def __new__(cls, *args: Any, multi_valued_field: Literal[False] | None = None, **kwargs: Any) -> Self: ...
+        @overload
+        def __new__(cls, *args: Any, multi_valued_field: bool | None = None, **kwargs: Any) -> Self | _M: ...
+        def __new__(cls, *args: Any, **kwargs: Any) -> Any: ...
+
+        @overload
+        def __get__(self, instance: None, owner: Any) -> _FieldDescriptor[Self]: ...
+        @overload
+        def __get__(self, instance: Model, owner: Any) -> _T: ...
+        @overload
+        def __get__(self, instance: Any, owner: Any) -> Self: ...
+        def __get__(self, instance: Any, owner: Any) -> Any: ...
 
     def __init__(
         self,
@@ -97,7 +129,14 @@ class LDAPField(django_fields.Field, RenderLookupProtocol):
             self.null = True
             self.read_only = read_only
 
-    def from_db_value(self, value, expression, connection) -> bytes | str | list[str] | None:  # noqa: ARG002
+    def render_lookup(self, field_name: str, lookup_name: str, value: Any) -> str | None:  # noqa: ARG002
+        """
+        Convert the value passed to the QuerySet filter to an LDAP filter string.
+        Return None to let the backend build the filter the default way.
+        """
+        return None
+
+    def from_db_value(self, value, expression, connection) -> Any:  # noqa: ARG002
         if value is None:
             if self.null:
                 return value
@@ -177,7 +216,9 @@ class LDAPField(django_fields.Field, RenderLookupProtocol):
         return name, path, args, kwargs
 
     @override
-    def get_db_prep_value(self, value: Any, connection: 'DatabaseWrapper', prepared: bool = False) -> list[bytes | str]:
+    def get_db_prep_value(
+        self, value: Any, connection: 'BaseDatabaseWrapper', prepared: bool = False
+    ) -> list[bytes | str]:
         """Prepare a value for DB interaction.
 
         Returns:
@@ -193,7 +234,7 @@ class LDAPField(django_fields.Field, RenderLookupProtocol):
             return value
 
         if value is None:
-            values: list[Any] = []
+            values: Sequence[Any] = []
         else:
             if self.multi_valued_field and not isinstance(value, list | tuple):
                 value = [value]
@@ -212,7 +253,7 @@ class LDAPField(django_fields.Field, RenderLookupProtocol):
 
         return unique_values
 
-    def get_db_prep_save(self, value, connection: 'DatabaseWrapper'):
+    def get_db_prep_save(self, value, connection: 'BaseDatabaseWrapper'):
         values = self.get_db_prep_value(value, connection, prepared=False)
         if self.binary_field:
             # Already raw values; don't encode it twice.
@@ -221,7 +262,7 @@ class LDAPField(django_fields.Field, RenderLookupProtocol):
             return [str(v).encode() for v in values]
 
 
-class CharField(django_fields.CharField, LDAPField):
+class CharField(django_fields.CharField, LDAPField[str, '_MultiCharField']):
     def __init__(self, *args, **kwargs):
         defaults = {'max_length': 200}
         defaults.update(kwargs)
@@ -253,7 +294,7 @@ class DistinguishedNameField(CharField):
     _allowed_lookups = {'exact', 'iexact', 'in', 'isnull'}
     default_validators = [validate_dn]
 
-    def get_lookup(self, lookup_name: str) -> Lookup | None:
+    def get_lookup(self, lookup_name: str) -> type[Lookup] | None:
         if lookup_name not in self._allowed_lookups:
             raise FieldError(
                 f'Lookup {lookup_name} is not supported for DN fields. '
@@ -286,19 +327,25 @@ class PrimaryDistinguishedNameField(DistinguishedNameField):
     Lookups on this field are converted to SCOPE_BASE searches by the compiler,
     instead of generating (dn=...) filters.
     """
+
     _allowed_lookups = {'exact', 'iexact', 'in', 'isnull'}
 
 
-class BinaryField(django_fields.BinaryField, LDAPField):
+class BinaryField(django_fields.BinaryField, LDAPField[bytes, '_MultiBinaryField']):
     binary_field = True
 
 
-class BooleanField(django_fields.BooleanField, LDAPField):
+class BooleanField(django_fields.BooleanField, LDAPField[bool, NoReturn]):
     """
     LDAP stores boolean values as 'TRUE' and 'FALSE'.
     Returns True if field is 'TRUE', None if field.null=True, and 'FALSE' otherwise.
     Default value is None if field.null=True but can be overridden by setting default=True or False.
     """
+
+    def __init__(self, *args, **kwargs):
+        if kwargs.get('multi_valued_field'):
+            raise ValueError(f'{self.__class__.__name__} does not support multi_valued_field=True')
+        super().__init__(*args, **kwargs)
 
     def from_db_value(self, value, expression, connection):
         raw = super().from_db_value(value, expression, connection)
@@ -316,7 +363,7 @@ class EmailField(django_fields.EmailField, CharField):
     pass
 
 
-class IntegerField(django_fields.IntegerField, LDAPField):
+class IntegerField(django_fields.IntegerField, LDAPField[int, '_MultiIntegerField']):
     def __init__(self, *args, **kwargs):
         kwargs['null'] = True
         super().__init__(*args, **kwargs)
@@ -348,7 +395,7 @@ LDAP_PASSWORD_HANDLERS = {
     LDAPPasswordAlgorithm.SSHA512: ldap_salted_sha512.hash,
     LDAPPasswordAlgorithm.PBKDF2_SHA256: ldap_pbkdf2_sha256.hash,
     LDAPPasswordAlgorithm.PBKDF2_SHA512: ldap_pbkdf2_sha512.hash,
-    LDAPPasswordAlgorithm.ARGON2: lambda pw, **options: f'{{ARGON2}}{argon2.using(**options).hash(pw)}',
+    LDAPPasswordAlgorithm.ARGON2: lambda pw, **options: f'{{ARGON2}}{argon2.using(**options).hash(pw)}',  # pyrefly: ignore[missing-attribute]
     LDAPPasswordAlgorithm.PLAINTEXT: lambda pw, **_: pw,
 }
 
@@ -389,7 +436,7 @@ class PasswordField(CharField):
 
     def check(self, **kwargs):
         errors = super().check(**kwargs)
-        if str(self.algorithm) == LDAPPasswordAlgorithm.ARGON2.value:
+        if self.algorithm == LDAPPasswordAlgorithm.ARGON2:
             errors.extend(self._check_installed_argon2())
         return errors
 
@@ -406,13 +453,14 @@ class PasswordField(CharField):
 
     @staticmethod
     def generate_password_hash(password: str, algorithm: LDAPPasswordAlgorithm | str, **options) -> str:
-        handler = LDAP_PASSWORD_HANDLERS.get(algorithm)
-        if not handler:
+        try:
+            handler = LDAP_PASSWORD_HANDLERS[LDAPPasswordAlgorithm(algorithm)]
+        except ValueError:
             raise ValueError(
                 f'No handler found for algorithm: {algorithm}. '
-                f'Supported algorithms: {", ".join(LDAP_PASSWORD_HANDLERS.keys())}.'
+                f'Supported algorithms: {", ".join(LDAP_PASSWORD_HANDLERS.keys())}. '
                 f'Or supply your own handler via the `handler` argument.'
-            )
+            ) from None
 
         # Note: Support for passing settings via .hash() will be removed in Passlib 2.0.
         # Since we're not sure about the future of passlib, we'll keep it as-is for now.
@@ -426,7 +474,7 @@ class PasswordField(CharField):
         return value
 
     @override
-    def pre_save(self, model_instance: 'LDAPModel', add: bool):
+    def pre_save(self, model_instance: 'Model', add: bool):
         """
         Called just before the field value is sent to the database.
         We use this to hash the plaintext and update the instance attribute.
@@ -438,7 +486,7 @@ class PasswordField(CharField):
             setattr(model_instance, self.attname, hashed_value)
         return hashed_value
 
-    def get_db_prep_save(self, value: str, connection: 'DatabaseWrapper'):
+    def get_db_prep_save(self, value: str, connection: 'BaseDatabaseWrapper'):
         value = self._hash_if_needed(value)
         return super().get_db_prep_save(value, connection)
 
@@ -448,6 +496,18 @@ class MemberField(DistinguishedNameField):
     multi_valued_field = True
     update_strategy = UpdateStrategy.ADD_DELETE
     apply_default_on_empty = True
+
+    if TYPE_CHECKING:
+        _pyi_private_set_type: list[str]  # type: ignore[assignment]
+        _pyi_private_get_type: list[str]  # type: ignore[assignment]
+
+        @overload
+        def __get__(self, instance: None, owner: Any) -> _FieldDescriptor[Self]: ...  # type: ignore[override]
+        @overload
+        def __get__(self, instance: Model, owner: Any) -> list[str]: ...
+        @overload
+        def __get__(self, instance: Any, owner: Any) -> Self: ...
+        def __get__(self, instance: Any, owner: Any) -> Any: ...
 
     # No custom get_db_prep_value needed; base class handles defaults.
     def from_db_value(self, value, expression, connection):
@@ -487,20 +547,18 @@ def parse_generalized_time(s: str) -> datetime:
     if not m:
         raise ValueError(f'Invalid GeneralizedTime value: {s!r}')
 
-    parts = {k: int(v) if v and k not in ['frac', 'tz'] else v for k, v in m.groupdict().items()}
-
     # Missing components default to minimal valid value (RFC says that is OK)
     dt = datetime(
-        parts['year'],
-        parts['mon'] or 1,
-        parts['day'] or 1,
-        parts['hour'] or 0,
-        parts['minute'] or 0,
-        parts['second'] or 0,
-        int(float(f'0.{parts["frac"]}') * 1_000_000) if parts['frac'] else 0,
+        int(m['year']),
+        int(m['mon'] or 1),
+        int(m['day'] or 1),
+        int(m['hour'] or 0),
+        int(m['minute'] or 0),
+        int(m['second'] or 0),
+        int(float(f'0.{m["frac"]}') * 1_000_000) if m['frac'] else 0,
     )
 
-    tz = parts['tz']
+    tz = m['tz']
     if tz == 'Z' or tz is None:
         dt = dt.replace(tzinfo=ZoneInfo('UTC'))
     else:
@@ -530,7 +588,7 @@ def format_generalized_time(dt: date | datetime, include_tz: bool = False) -> st
     return dt.strftime('%Y%m%d%H%M%SZ')
 
 
-class DateTimeField(LDAPField, django_fields.DateTimeField):
+class DateTimeField(LDAPField[datetime, '_MultiDateTimeField'], django_fields.DateTimeField):
     default_date_format = '%Y-%m-%d %H:%M:%S %z'
 
     def __init__(self, *args, fmt: str | None = None, include_tz: bool = False, **kwargs):
@@ -538,7 +596,7 @@ class DateTimeField(LDAPField, django_fields.DateTimeField):
         self.include_tz = include_tz
         super().__init__(*args, **kwargs)
 
-    def from_db_value(self, value, expression, connection):
+    def from_db_value(self, value, expression, connection) -> datetime | None:
         value = super().from_db_value(value, expression, connection)
         if value is None:
             return None
@@ -566,14 +624,14 @@ class DateTimeField(LDAPField, django_fields.DateTimeField):
         return value
 
 
-class DateField(LDAPField, django_fields.DateField):
+class DateField(LDAPField[date, '_MultiDateField'], django_fields.DateField):
     """
     LDAP-specific DateField that handles LDAP GeneralizedTime strings and normalizes to date objects.
     We keep this seperate from DateTimeField because some integration check the field type via isinstance().
     """
 
-    def from_db_value(self, *args, **kwargs) -> date | None:
-        value: str = super().from_db_value(*args, **kwargs)
+    def from_db_value(self, value, expression, connection) -> date | None:
+        value = super().from_db_value(value, expression, connection)
         if value is None:
             return None
 
@@ -591,3 +649,26 @@ class DateField(LDAPField, django_fields.DateField):
             value = value.date()
 
         return format_generalized_time(value, include_tz=False)
+
+
+if TYPE_CHECKING:
+
+    class _MultiCharField(_MultiValued[str], CharField):
+        _pyi_private_set_type: list[str]  # type: ignore[assignment]
+        _pyi_private_get_type: list[str]  # type: ignore[assignment]
+
+    class _MultiBinaryField(_MultiValued[bytes], BinaryField):
+        _pyi_private_set_type: list[bytes]  # type: ignore[assignment]
+        _pyi_private_get_type: list[bytes]  # type: ignore[assignment]
+
+    class _MultiIntegerField(_MultiValued[int], IntegerField):
+        _pyi_private_set_type: list[int]  # type: ignore[assignment]
+        _pyi_private_get_type: list[int]  # type: ignore[assignment]
+
+    class _MultiDateTimeField(_MultiValued[datetime], DateTimeField):
+        _pyi_private_set_type: list[datetime]  # type: ignore[assignment]
+        _pyi_private_get_type: list[datetime]  # type: ignore[assignment]
+
+    class _MultiDateField(_MultiValued[date], DateField):
+        _pyi_private_set_type: list[date]  # type: ignore[assignment]
+        _pyi_private_get_type: list[date]  # type: ignore[assignment]
