@@ -1,7 +1,6 @@
-from collections import namedtuple
-
 from django.db import NotSupportedError
 from django.db.models import Q
+from django.db.models.utils import create_namedtuple_class
 from ldapdb.backends.ldap.lib import LDAPScope
 
 from example.models import LDAPUser
@@ -182,7 +181,7 @@ class SQLCompilerTestCase(LDAPTestCase):
         queryset = self.get_testuser_objects().values_list(*values, named=True)
         expected_ldap_search = get_new_ldap_search(attrlist=['cn'], filterstr='(|(uid=admin)(uid=user1)(uid=user2))')
         self.assertLDAPSearchIsEqual(queryset, expected_ldap_search)
-        row_tuple = namedtuple('Row', values)
+        row_tuple = create_namedtuple_class(*values)
         self.assertQuerySetEqual(
             queryset,
             [row_tuple(u.name) for u in TEST_LDAP_AVAILABLE_USERS],

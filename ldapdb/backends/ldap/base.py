@@ -1,5 +1,6 @@
 from collections import deque
 from functools import cached_property
+from typing import Any
 
 import ldap
 from django.db.backends.base.base import BaseDatabaseWrapper
@@ -81,7 +82,7 @@ class DatabaseWrapper(BaseDatabaseWrapper):
     def charset(self):
         return self.settings_dict.get('CHARSET', 'utf-8')
 
-    def get_connection_params(self):
+    def get_connection_params(self) -> dict[str, Any]:
         """
         Compute appropriate parameters for establishing a new connection.
         Computed at system startup.
