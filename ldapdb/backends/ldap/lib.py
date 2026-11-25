@@ -77,6 +77,18 @@ class LDAPSearch:
     def ldap_offset(self):
         return self.offset + 1
 
+    @property
+    def uses_vlv(self) -> bool:
+        return bool(self.limit or self.offset)
+
+    @property
+    def vlv_after_count(self) -> int:
+        return max(0, self.limit - 1)
+
+    @property
+    def sss_ordering_rules(self) -> list[str]:
+        return [f'{attribute}:{rule}' for attribute, rule in self.ordering_rules]
+
     def serialize(self):
         return {
             'attrlist': sorted(self.attrlist),

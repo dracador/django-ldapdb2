@@ -276,14 +276,13 @@ class DatabaseCursor:
     def _execute_with_sssvlv(self, timeout: int = -1):
         serverctrls: list[RequestControl] = []
 
-        sss_ordering_rules = [f'{attr}:{order_rule}' for attr, order_rule in self.search_obj.ordering_rules]
+        sss_ordering_rules = self.search_obj.sss_ordering_rules
         logger.debug('DatabaseCursor._execute_with_sssvlv: Ordering rules: %s', sss_ordering_rules)
         sss_ctrl = SSSRequestControl(criticality=True, ordering_rules=sss_ordering_rules)
         serverctrls.append(sss_ctrl)
 
         vlv_ctrl = None
-        use_vlv = self.search_obj.limit or self.search_obj.offset
-        if use_vlv:
+        if self.search_obj.uses_vlv:
             # Not sure if we want to keep track of the context_id and offset here, since we could have a more lazy
             # iterator when using this with fetchmany. Otherwise we'll just always do a new search.
             vlv_context_id = None
@@ -291,7 +290,7 @@ class DatabaseCursor:
             vlv_ctrl = VLVRequestControl(
                 criticality=True,
                 before_count=0,
-                after_count=max(0, self.search_obj.limit - 1),
+                after_count=self.search_obj.vlv_after_count,
                 offset=self.search_obj.ldap_offset,
                 content_count=0,
                 context_id=vlv_context_id,
