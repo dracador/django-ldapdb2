@@ -11,6 +11,8 @@ class DatabaseOperations(BaseDatabaseOperations):
     connection: 'DatabaseWrapper'
     compiler_module = 'ldapdb.backends.ldap.compiler'
 
+    explain_prefix = 'EXPLAIN'  # used by features.supports_explaining_query_execution
+
     def get_db_converters(self, expression):
         converters = super().get_db_converters(expression)
         field = expression.output_field

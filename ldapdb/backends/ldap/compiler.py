@@ -16,6 +16,7 @@ from ldap.filter import escape_filter_chars
 from ldapdb.exceptions import LDAPModelTypeError
 from ldapdb.models import LDAPModel, LDAPQuery
 from ldapdb.models.fields import LDAPField, PrimaryDistinguishedNameField, UpdateStrategy
+from .explain import render_ldapsearch, render_text
 from .ldif_helpers import AddRequest, ModifyRequest
 from .lib import LDAPAddOp, LDAPDeleteOp, LDAPModifyOp, LDAPRawSearchOp, LDAPSearch, LDAPSearchControlType
 from .lookups import LDAP_OPERATORS
@@ -453,6 +454,24 @@ class SQLCompiler(BaseSQLCompiler):
 
         # Normally returns "sql, params" but we want the whole query instance passed to the cursors execute() method
         return self.query, ()
+
+    def explain_query(self):
+        explain_info = self.query.explain_info
+        self.connection.ops.explain_query_prefix(explain_info.format, **explain_info.options)
+
+        query, _params = self.as_sql()
+        connection_params = self.connection.get_connection_params()
+        page_size = connection_params['page_size']
+
+        if (explain_info.format or 'TEXT').upper() == 'LDAPSEARCH':
+            yield from render_ldapsearch(
+                query.ldap_search,
+                page_size,
+                uri=connection_params['uri'],
+                bind_dn=connection_params['bind_dn'],
+            )
+        else:
+            yield from render_text(query.ldap_search, page_size)
 
     def execute_sql(self, result_type=MULTI, chunked_fetch=False, chunk_size=GET_ITERATOR_CHUNK_SIZE):
         logger.debug('SQLCompiler.execute_sql: %s, %s, %s', result_type, chunked_fetch, chunk_size)

@@ -78,6 +78,7 @@ class DatabaseFeatures(BaseDatabaseFeatures):
     supports_non_deterministic_collations = False
     supports_unlimited_charfield = True  # not sure if this is dependent on the ldap server
     supports_bit_aggregations = False
+    supported_explain_formats = {'TEXT', 'LDAPSEARCH'}
 
     # We cannot properly use the default inspectdb command.
     # Use the `inspectldap` management command, instead.
