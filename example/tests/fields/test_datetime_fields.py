@@ -9,6 +9,8 @@ from ldapdb.models.fields import DateField, DateTimeField, format_generalized_ti
 from example.tests.base import BaseLDAPTestUser, LDAPTestCase
 from example.tests.generator import generate_random_username
 
+UTC_PLUS_ONE = datetime.timezone(datetime.timedelta(hours=1))
+
 
 class DateTestModel(BaseLDAPTestUser):
     date_field = DateField(db_column='x-user-date')
@@ -40,12 +42,12 @@ class DateFieldTests(LDAPTestCase):
         self.assertEqual(format_generalized_time(datetime_obj), '19900101010000Z')
 
     def test_date_formatting_with_tz_to_utc(self):
-        datetime_obj_with_tz = datetime.datetime(1990, 1, 1, 1, 0, 0, tzinfo=ZoneInfo('CET'))
+        datetime_obj_with_tz = datetime.datetime(1990, 1, 1, 1, 0, 0, tzinfo=UTC_PLUS_ONE)
         obj = format_generalized_time(datetime_obj_with_tz)
         self.assertEqual(obj, '19900101000000Z')
 
     def test_date_formatting_with_tz_to_tz_aware(self):
-        datetime_obj_with_tz = datetime.datetime(1990, 1, 1, 1, 0, 0, tzinfo=ZoneInfo('CET'))
+        datetime_obj_with_tz = datetime.datetime(1990, 1, 1, 1, 0, 0, tzinfo=UTC_PLUS_ONE)
         obj = format_generalized_time(datetime_obj_with_tz, include_tz=True)
         self.assertEqual(obj, '19900101010000+0100')
 
@@ -92,7 +94,7 @@ class DateFieldTests(LDAPTestCase):
         self.assertEqual(instance.date_time_field, self._adjust_expected_dt(dt))
 
     def test_datetime_tz_field_object(self):
-        dt = datetime.datetime(1990, 1, 1, hour=1, tzinfo=datetime.timezone(datetime.timedelta(hours=1)))
+        dt = datetime.datetime(1990, 1, 1, hour=1, tzinfo=UTC_PLUS_ONE)
         instance = DateTimeWithTimezoneTestModel(date_time_tz_field=dt, username=generate_random_username())
         instance.full_clean()
         instance.save()
@@ -100,7 +102,7 @@ class DateFieldTests(LDAPTestCase):
         self.assertEqual(instance.date_time_tz_field, self._adjust_expected_dt(dt))
 
     def test_datetime_tz_field_string(self):
-        dt = datetime.datetime(1990, 1, 1, hour=1, tzinfo=datetime.timezone(datetime.timedelta(hours=1)))
+        dt = datetime.datetime(1990, 1, 1, hour=1, tzinfo=UTC_PLUS_ONE)
         instance = DateTimeWithTimezoneTestModel(
             date_time_tz_field='1990-01-01 01:00:00+0100', username=generate_random_username()
         )
