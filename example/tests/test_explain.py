@@ -35,6 +35,15 @@ class ExplainTextTestCase(LDAPTestCase):
         explanation = LDAPUser.objects.order_by('-username').values('username').explain()
         self.assertIn('  controls:   server-side sort (-uid:caseIgnoreOrderingMatch)\n', explanation)
 
+    def test_offset_without_limit_is_sliced_in_python(self):
+        explanation = LDAPUser.objects.order_by('username').values('username')[5:].explain()
+        self.assertTrue(
+            explanation.endswith(
+                '  controls:   server-side sort (uid:caseIgnoreOrderingMatch)\n  in Python:  slice [5:]'
+            ),
+            explanation,
+        )
+
     def test_filtered_dn_as_base_scope(self):
         explanation = LDAPUser.objects.filter(dn=TEST_LDAP_USER_1.dn).values('username').explain()
         self.assertTrue(

@@ -193,7 +193,7 @@ class TestNoControlOrdering(LDAPTestCase):
 
         self.assertEqual(len(results), 1)
         uid_index = query.ldap_search.attrlist.index('uid')
-        expected_username = sorted(u.username for u in TEST_LDAP_AVAILABLE_USERS)[0]
+        expected_username = min(u.username for u in TEST_LDAP_AVAILABLE_USERS)
         self.assertEqual(results[0][uid_index][0].decode(), expected_username)
 
     def test_slicing_with_offset(self):
@@ -235,6 +235,25 @@ class TestQuerySetOrdering(LDAPTestCase):
         second = list(self.get_testuser_objects().order_by('username')[1:2])
         self.assertEqual(len(second), 1)
         self.assertEqual(second[0].username, all_users[1].username)
+
+    def test_slicing_without_limit_returns_all_remaining_entries(self):
+        all_usernames = [user.username for user in self.get_testuser_objects().order_by('username')]
+        self.assertGreater(len(all_usernames), 2)
+        remaining = self.get_testuser_objects().order_by('username')[1:]
+        self.assertEqual([user.username for user in remaining], all_usernames[1:])
+
+    def test_slicing_without_limit_past_the_end_returns_nothing(self):
+        user_count = len(self.get_testuser_objects())
+        self.assertEqual(list(self.get_testuser_objects().order_by('username')[user_count:]), [])
+
+    def test_slicing_without_limit_sends_no_vlv_control(self):
+        ldap_search = queryset_to_ldap_search(self.get_testuser_objects().order_by('username')[1:])
+        self.assertEqual(ldap_search.control_type, LDAPSearchControlType.SSSVLV)
+        self.assertFalse(ldap_search.uses_vlv)
+
+    def test_slicing_with_limit_sends_vlv_control(self):
+        ldap_search = queryset_to_ldap_search(self.get_testuser_objects().order_by('username')[1:2])
+        self.assertTrue(ldap_search.uses_vlv)
 
 
 class TestFirstAndLast(LDAPTestCase):

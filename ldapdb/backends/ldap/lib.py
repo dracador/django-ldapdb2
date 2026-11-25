@@ -79,7 +79,13 @@ class LDAPSearch:
 
     @property
     def uses_vlv(self) -> bool:
-        return bool(self.limit or self.offset)
+        # Note:
+        # VLV itself doesn't support something like "offset: 30" with an after_count="until_the_end",
+        # so we'll have to do a full search without VLV in the cursor and then drop the offset :/
+        # Could also do some extremely high after_count, but that'd feel somewhat whacky.
+        # (openLDAP supports up to 2**31-2)
+        # tl;dr: we can only properly use VLV if the limit is set.
+        return bool(self.limit)
 
     @property
     def vlv_after_count(self) -> int:

@@ -96,7 +96,6 @@ class DatabaseCursor:
 
     Notes on Ordering:
     Without Server Side Sorting (SSS), the results will not be ordered by the LDAP server directly.
-    TODO: Implement a way to sort results in Python if SSS is not used.
     """
 
     def __init__(self, connection, settings_dict: dict | None = None):
@@ -232,6 +231,8 @@ class DatabaseCursor:
                 self.search_obj.offset,
                 self.search_obj.limit,
             )
+        elif not self.search_obj.uses_vlv:
+            self.results = self.results[self.search_obj.offset :]
 
         self.set_description()
         self.format_results()

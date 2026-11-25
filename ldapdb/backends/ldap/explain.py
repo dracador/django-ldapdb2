@@ -12,7 +12,9 @@ LDAPSEARCH_SCOPES = {
 
 def _get_python_side_steps(search: LDAPSearch) -> list[str]:
     if search.control_type == LDAPSearchControlType.SSSVLV:
-        return []
+        if search.uses_vlv or not search.offset:
+            return []
+        return [f'slice [{search.offset}:]']
 
     steps = []
     if search.ordering_rules:
